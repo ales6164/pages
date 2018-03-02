@@ -20,19 +20,5 @@ func templateFunctions(p *Pages) template.FuncMap {
 		"t": func(c *Context, x string) string {
 			return p.translations[x][c.Locale]
 		},
-		"get": func(c *Context, x string) interface{} {
-			return c.data[x]
-		},
-		"set": func(c *Context, x string, v interface{}) interface{} {
-			c.data[x] = v
-			return ""
-		},
-		"lget": func(c *Context, x string) string {
-			return c.data[x].(string)
-		},
-		"lset": func(c *Context, x string, v string) string {
-			c.data[x] = p.translations[v][c.Locale]
-			return ""
-		},
 	}
 }

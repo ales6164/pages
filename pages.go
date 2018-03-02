@@ -90,7 +90,9 @@ func New(opt *Options) (*Pages, error) {
 			}
 			route.pattern = pattern
 			route.locale = p.DefaultLocale
-			route.Alternative[p.DefaultLocale] = pattern
+			if route.Alternative != nil {
+				route.Alternative[p.DefaultLocale] = pattern
+			}
 
 			p.handle(pattern, route)
 
