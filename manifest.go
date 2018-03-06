@@ -1,24 +1,25 @@
 package pages
 
 type Manifest struct {
-	Resources     []*Resource `json:"resources"`
-	Name          string      `json:"name"`
-	Templates     []string    `json:"templates"`
-	Files         []string    `json:"files"`
-	Routers       []*Router   `json:"routers"`
-	Layout        string      `json:"layout"`
-	DefaultLocale string      `json:"default_locale"`
+	/*Resources     []*Resource `json:"resources"`
+	Name          string      `json:"name"`*/
+	Dist      string   `json:"dist"`
+	Templates []string `json:"templates"`
+	/*Files         []string    `json:"files"`*/
+	Routers []*Router `json:"routers"`
+	Layout  string    `json:"layout"`
+	/*DefaultLocale string      `json:"default_locale"`*/
 }
 
-type Resource struct {
+/*type Resource struct {
 	Src  string `json:"src"`
 	Type string `json:"type"`
-}
+}*/
 
 type Router struct {
 	Layout string            `json:"layout"`
 	Handle map[string]*Route `json:"handle"`
-	Auth   *Auth             `json:"auth"`
+	/*Auth   *Auth             `json:"auth"`*/
 }
 
 type Route struct {

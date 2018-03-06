@@ -3,8 +3,6 @@ package pages
 import (
 	"html/template"
 	"path"
-	"io/ioutil"
-	"encoding/json"
 	"path/filepath"
 	"github.com/gorilla/mux"
 	"bytes"
@@ -36,13 +34,13 @@ func New(opt *Options) (*Pages, error) {
 	}
 
 	// read manifest
-	err := readAndUnmarshal(path.Join(p.Base, p.JsonFilePath), p.Manifest)
+	err := readAndUnmarshal(p.JsonFilePath, p.Manifest)
 	if err != nil {
 		return p, err
 	}
 
 	// parse resources
-	for _, res := range p.Resources {
+	/*for _, res := range p.Resources {
 		bs, err := ioutil.ReadFile(path.Join(p.Base, res.Src))
 		if err != nil {
 			panic(err)
@@ -59,6 +57,11 @@ func New(opt *Options) (*Pages, error) {
 				p.translations[k] = v
 			}
 		}
+	}*/
+
+	// set compile path
+	if !path.IsAbs(p.Dist) {
+		p.Dist = path.Join(p.Base, p.Dist)
 	}
 
 	// set template functions
@@ -67,14 +70,20 @@ func New(opt *Options) (*Pages, error) {
 	// parse templates
 	var files []string
 	for _, templatesPath := range p.Templates {
-		fs, err := filepath.Glob(path.Join(p.Base, templatesPath))
+		if !path.IsAbs(templatesPath) {
+			templatesPath = path.Join(p.Base, templatesPath)
+		}
+		fs, err := filepath.Glob(templatesPath)
 		if err != nil {
 			panic(err)
 		}
 		files = append(files, fs...)
 	}
 	if len(files) > 0 {
-		p.templates = template.Must(template.New("").Funcs(p.functions).ParseFiles(files...))
+		p.templates, err = template.New("").Funcs(p.functions).ParseFiles(files...)
+		if err != nil {
+			return p, err
+		}
 	}
 
 	// build router
@@ -89,10 +98,10 @@ func New(opt *Options) (*Pages, error) {
 				route.Layout = layout
 			}
 			route.pattern = pattern
-			route.locale = p.DefaultLocale
+			/*route.locale = p.DefaultLocale
 			if route.Alternative != nil {
 				route.Alternative[p.DefaultLocale] = pattern
-			}
+			}*/
 
 			p.handle(pattern, route)
 
