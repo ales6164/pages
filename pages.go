@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"net/http"
+	"errors"
+	"io"
 )
 
 type Pages struct {
@@ -38,6 +40,9 @@ func New(opt *Options) (*Pages, error) {
 	if err != nil {
 		return p, err
 	}
+
+	// set base path from calling script absolute path and settings.json dir
+	p.Base = path.Join(p.Base, path.Dir(p.JsonFilePath))
 
 	// parse resources
 	/*for _, res := range p.Resources {
@@ -84,9 +89,60 @@ func New(opt *Options) (*Pages, error) {
 		if err != nil {
 			return p, err
 		}
+	} else {
+		return p, errors.New("templates undefined")
 	}
 
 	// build router
+	/*var layout string
+	for _, router := range p.Routers {
+		layout = p.Layout
+		if len(router.Layout) > 0 {
+			layout = router.Layout
+		}
+		for pattern, route := range router.Handle {
+			if len(route.Layout) == 0 {
+				route.Layout = layout
+			}
+			route.pattern = pattern
+			*//*route.locale = p.DefaultLocale
+			if route.Alternative != nil {
+				route.Alternative[p.DefaultLocale] = pattern
+			}*//*
+
+			p.handle(pattern, route)
+
+			for locale, pattern := range route.Alternative {
+				p.handle(pattern, &Route{
+					locale:      locale,
+					pattern:     pattern,
+					Alternative: route.Alternative,
+					Page:        route.Page,
+					Layout:      route.Layout,
+					layout:      route.layout,
+				})
+			}
+		}
+	}*/
+
+	return p, nil
+}
+
+func (p *Pages) Execute(wr io.Writer, layout string, page string) error {
+	ctx := &Context{
+		data: map[string]interface{}{},
+		Page: page,
+	}
+	buf := new(bytes.Buffer)
+	err := p.templates.ExecuteTemplate(buf, page, ctx)
+	if err != nil {
+		return err
+	}
+	ctx.html = template.HTML(buf.String())
+	return p.templates.ExecuteTemplate(wr, layout, ctx)
+}
+
+func (p *Pages) BuildRouter() {
 	var layout string
 	for _, router := range p.Routers {
 		layout = p.Layout
@@ -98,8 +154,8 @@ func New(opt *Options) (*Pages, error) {
 				route.Layout = layout
 			}
 			route.pattern = pattern
-			/*route.locale = p.DefaultLocale
-			if route.Alternative != nil {
+
+			/*if route.Alternative != nil {
 				route.Alternative[p.DefaultLocale] = pattern
 			}*/
 
@@ -117,15 +173,11 @@ func New(opt *Options) (*Pages, error) {
 			}
 		}
 	}
-
-	return p, nil
 }
 
 func (p *Pages) handle(pattern string, route *Route) {
 	ctx := &Context{
-		route:  route,
 		data:   map[string]interface{}{},
-		Locale: route.locale,
 		Page:   route.Page,
 	}
 	buf := new(bytes.Buffer)
@@ -136,7 +188,6 @@ func (p *Pages) handle(pattern string, route *Route) {
 	}
 	ctx.html = template.HTML(buf.String())
 	p.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		ctx.r = r
 		err := p.templates.ExecuteTemplate(w, route.Layout, ctx)
 		if err != nil {
 			fmt.Println(err)
