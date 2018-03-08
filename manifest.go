@@ -1,6 +1,7 @@
 package pages
 
 type Manifest struct {
+	API string `json:"api"`
 	/*Resources     []*Resource `json:"resources"`
 	Name          string      `json:"name"`*/
 	Dist      string   `json:"dist"`

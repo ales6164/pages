@@ -5,7 +5,7 @@ import (
 )
 
 type Context struct {
-	Page  string
-	html  template.HTML
-	data  map[string]interface{}
+	Page string
+	html template.HTML
+	data map[string]interface{}
 }

@@ -17,12 +17,16 @@ type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	templates    *template.Template
-	translations NamedTranslations
-	functions    template.FuncMap
+	TemplateFilePaths []string
+	templates         *template.Template
+	translations      NamedTranslations
+	functions         template.FuncMap
+
+	currentContext *Context
 }
 
 type Options struct {
+	IsRendering  bool
 	Base         string
 	JsonFilePath string
 }
@@ -70,10 +74,13 @@ func New(opt *Options) (*Pages, error) {
 	}
 
 	// set template functions
-	p.functions = templateFunctions(p)
+	if p.Options.IsRendering {
+		p.functions = renderingTemplateFunctions(p)
+	} else {
+		p.functions = templateFunctions(p)
+	}
 
 	// parse templates
-	var files []string
 	for _, templatesPath := range p.Templates {
 		if !path.IsAbs(templatesPath) {
 			templatesPath = path.Join(p.Base, templatesPath)
@@ -82,10 +89,10 @@ func New(opt *Options) (*Pages, error) {
 		if err != nil {
 			panic(err)
 		}
-		files = append(files, fs...)
+		p.TemplateFilePaths = append(p.TemplateFilePaths, fs...)
 	}
-	if len(files) > 0 {
-		p.templates, err = template.New("").Funcs(p.functions).ParseFiles(files...)
+	if len(p.TemplateFilePaths) > 0 {
+		p.templates, err = template.New("").Funcs(p.functions).ParseFiles(p.TemplateFilePaths...)
 		if err != nil {
 			return p, err
 		}
@@ -129,17 +136,17 @@ func New(opt *Options) (*Pages, error) {
 }
 
 func (p *Pages) Execute(wr io.Writer, layout string, page string) error {
-	ctx := &Context{
+	p.currentContext = &Context{
 		data: map[string]interface{}{},
 		Page: page,
 	}
 	buf := new(bytes.Buffer)
-	err := p.templates.ExecuteTemplate(buf, page, ctx)
+	err := p.templates.ExecuteTemplate(buf, page, p.currentContext)
 	if err != nil {
 		return err
 	}
-	ctx.html = template.HTML(buf.String())
-	return p.templates.ExecuteTemplate(wr, layout, ctx)
+	p.currentContext.html = template.HTML(buf.String())
+	return p.templates.ExecuteTemplate(wr, layout, p.currentContext)
 }
 
 func (p *Pages) BuildRouter() {
@@ -177,8 +184,8 @@ func (p *Pages) BuildRouter() {
 
 func (p *Pages) handle(pattern string, route *Route) {
 	ctx := &Context{
-		data:   map[string]interface{}{},
-		Page:   route.Page,
+		data: map[string]interface{}{},
+		Page: route.Page,
 	}
 	buf := new(bytes.Buffer)
 	err := p.templates.ExecuteTemplate(buf, route.Page, ctx)
