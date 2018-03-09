@@ -7,7 +7,6 @@ import (
 	"github.com/gorilla/mux"
 	"bytes"
 	"fmt"
-	"os"
 	"net/http"
 	"errors"
 	"io"
@@ -26,8 +25,8 @@ type Pages struct {
 }
 
 type Options struct {
+	base         string
 	IsRendering  bool
-	Base         string
 	JsonFilePath string
 }
 
@@ -46,31 +45,11 @@ func New(opt *Options) (*Pages, error) {
 	}
 
 	// set base path from calling script absolute path and settings.json dir
-	p.Base = path.Join(p.Base, path.Dir(p.JsonFilePath))
-
-	// parse resources
-	/*for _, res := range p.Resources {
-		bs, err := ioutil.ReadFile(path.Join(p.Base, res.Src))
-		if err != nil {
-			panic(err)
-		}
-
-		switch res.Type {
-		case "key-locale":
-			var locale NamedTranslations
-			err = json.Unmarshal(bs, &locale)
-			if err != nil {
-				panic(err)
-			}
-			for k, v := range locale {
-				p.translations[k] = v
-			}
-		}
-	}*/
+	p.base = path.Dir(p.JsonFilePath)
 
 	// set compile path
 	if !path.IsAbs(p.Dist) {
-		p.Dist = path.Join(p.Base, p.Dist)
+		p.Dist = path.Join(p.base, p.Dist)
 	}
 
 	// set template functions
@@ -83,7 +62,7 @@ func New(opt *Options) (*Pages, error) {
 	// parse templates
 	for _, templatesPath := range p.Templates {
 		if !path.IsAbs(templatesPath) {
-			templatesPath = path.Join(p.Base, templatesPath)
+			templatesPath = path.Join(p.base, templatesPath)
 		}
 		fs, err := filepath.Glob(templatesPath)
 		if err != nil {
@@ -100,44 +79,12 @@ func New(opt *Options) (*Pages, error) {
 		return p, errors.New("templates undefined")
 	}
 
-	// build router
-	/*var layout string
-	for _, router := range p.Routers {
-		layout = p.Layout
-		if len(router.Layout) > 0 {
-			layout = router.Layout
-		}
-		for pattern, route := range router.Handle {
-			if len(route.Layout) == 0 {
-				route.Layout = layout
-			}
-			route.pattern = pattern
-			*//*route.locale = p.DefaultLocale
-			if route.Alternative != nil {
-				route.Alternative[p.DefaultLocale] = pattern
-			}*//*
-
-			p.handle(pattern, route)
-
-			for locale, pattern := range route.Alternative {
-				p.handle(pattern, &Route{
-					locale:      locale,
-					pattern:     pattern,
-					Alternative: route.Alternative,
-					Page:        route.Page,
-					Layout:      route.Layout,
-					layout:      route.layout,
-				})
-			}
-		}
-	}*/
-
 	return p, nil
 }
 
 func (p *Pages) Execute(wr io.Writer, layout string, page string) error {
 	p.currentContext = &Context{
-		data: map[string]interface{}{},
+		/*data: map[string]interface{}{},*/
 		Page: page,
 	}
 	buf := new(bytes.Buffer)
@@ -183,22 +130,26 @@ func (p *Pages) BuildRouter() {
 }
 
 func (p *Pages) handle(pattern string, route *Route) {
-	ctx := &Context{
-		data: map[string]interface{}{},
-		Page: route.Page,
-	}
-	buf := new(bytes.Buffer)
-	err := p.templates.ExecuteTemplate(buf, route.Page, ctx)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	ctx.html = template.HTML(buf.String())
 	p.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		err := p.templates.ExecuteTemplate(w, route.Layout, ctx)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+		vars := mux.Vars(r)
+		ctx := &Context{
+			/*data: map[string]interface{}{},*/
+			Page: route.Page,
+			Vars: vars,
 		}
+		p.currentContext = ctx
+		buf := new(bytes.Buffer)
+		err := p.templates.ExecuteTemplate(buf, route.Page, ctx)
+		if err != nil {
+			panic(err)
+		}
+		ctx.html = template.HTML(buf.String())
+
+		buf2 := new(bytes.Buffer)
+		err = p.templates.ExecuteTemplate(buf2, route.Layout, ctx)
+		if err != nil {
+			fmt.Fprint(w, err)
+		}
+		w.Write(buf2.Bytes())
 	})
 }

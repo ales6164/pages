@@ -5,7 +5,10 @@ import (
 )
 
 type Context struct {
-	Page string
+	Vars  map[string]string
+	Query map[string]interface{}
+	Page  string
+
 	html template.HTML
-	data map[string]interface{}
+	/*data map[string]interface{}*/
 }

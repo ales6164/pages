@@ -2,9 +2,6 @@ package pages
 
 import (
 	"html/template"
-	"io/ioutil"
-	"net/http"
-	"encoding/json"
 )
 
 func templateFunctions(p *Pages) template.FuncMap {
@@ -12,10 +9,9 @@ func templateFunctions(p *Pages) template.FuncMap {
 		"routerOutlet": func() template.HTML {
 			return p.currentContext.html
 		},
-		"fetch": func(kind string, id string) interface{} {
-
+		/*"fetch": func(kind string, id string) map[string]interface{} {
 			return nil
-		},
+		},*/
 		/*"alternative": func(c *Context) template.HTML {
 			var links = ""
 			for hreflang, href := range c.route.Alternative {
@@ -34,7 +30,7 @@ func renderingTemplateFunctions(p *Pages) template.FuncMap {
 		"routerOutlet": func() template.HTML {
 			return p.currentContext.html
 		},
-		"fetch": func(kind string, id string) map[string]interface{} {
+		/*"fetch": func(kind string, id string) map[string]interface{} {
 			rs, err := http.Get(p.API + kind + "/" + id)
 			if err != nil {
 				panic(err)
@@ -50,7 +46,7 @@ func renderingTemplateFunctions(p *Pages) template.FuncMap {
 				panic(err)
 			}
 			return data
-		},
+		},*/
 		/*"alternative": func(c *Context) template.HTML {
 			var links = ""
 			for hreflang, href := range c.route.Alternative {
