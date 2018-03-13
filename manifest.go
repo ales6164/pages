@@ -28,6 +28,7 @@ children is an array of child route definitions.
 loadChildren is a reference to lazy loaded child routes. See LoadChildren for more info.
  */
 type Route struct {
+	id        int // used for route handling
 	Path      string   `json:"path"`
 	Component string   `json:"component"`
 	Outlet    string   `json:"outlet"`
