@@ -2,7 +2,6 @@ package pages
 
 import (
 	"path"
-	"path/filepath"
 	"github.com/gorilla/mux"
 	"bytes"
 	"net/http"
@@ -53,28 +52,20 @@ func New(opt *Options) (*Pages, error) {
 
 	// parse templates
 	var partials = map[string]string{}
-	for _, templatesPath := range p.Imports {
-		if !path.IsAbs(templatesPath) {
-			templatesPath = path.Join(p.base, templatesPath)
-		}
-		fs, err := filepath.Glob(templatesPath)
-		if err != nil {
-			return p, err
+	for _, imp := range p.Imports {
+		if !path.IsAbs(imp.URL) {
+			imp.URL = path.Join(p.base, imp.URL)
 		}
 
 		// read templates and load into map
 
-		for _, f := range fs {
-			templateBytes, err := ioutil.ReadFile(f)
-			if err != nil {
-				return p, err
-			}
-			name := path.Base(f)
-			name = name[0 : len(name)-len(path.Ext(name))]
-			content := string(templateBytes)
-
-			partials[name] = content
+		templateBytes, err := ioutil.ReadFile(imp.URL)
+		if err != nil {
+			return p, err
 		}
+
+		partials[imp.Name] = string(templateBytes)
+
 	}
 
 	p.partials = mustache.StaticProvider{Partials: partials}
@@ -205,90 +196,4 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 	})
 
 	return err
-}
-
-// also needs to pass parent routes that need to be rendered before any child
-func (p *Pages) buildRoute(r *mux.Router, route *Route, basePath string, parents []*Route) (err error) {
-	//mux.NewRouter().PathPrefix(opt.HandlerPathPrefix).Subrouter(),
-
-	if len(route.Children) > 0 {
-		ps := append(parents, route)
-		for _, childRoute := range route.Children {
-			err = p.buildRoute(r, childRoute, basePath+route.Path, ps)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	err = p.handle(r, route, basePath, parents)
-	if err != nil {
-		return err
-	}
-
-	return err
-}
-
-func (p *Pages) handle(router *mux.Router, r *Route, basePath string, parents []*Route) error {
-	// 1. Render parents first
-	// 2. Render actual route
-
-	var document = p.documents["index"].Clone()
-
-	for _, parent := range append(parents, r) {
-		// set outlet
-		outlet := parent.Outlet
-		if len(outlet) == 0 {
-			outlet = DefaultOutlet
-		}
-
-		outletSelection := document.Find(outlet)
-		if outletSelection.Length() == 0 {
-			return errors.New("can't find router outlet " + outlet)
-		}
-
-		component := p.documents[parent.Component].Clone()
-		if component.Children().Length() == 0 {
-			return errors.New("component empty " + parent.Component)
-		}
-
-		componentHtml, err := component.Html()
-		if err != nil {
-			return err
-		}
-
-		outletSelection.SetHtml(componentHtml)
-	}
-
-	html, err := document.Html()
-	if err != nil {
-		return err
-	}
-
-	html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
-
-	temp, err := mustache.ParseStringPartials(html, &p.partials)
-	if err != nil {
-		return err
-	}
-
-	router.HandleFunc(basePath+r.Path, func(w http.ResponseWriter, req *http.Request) {
-		//vars := mux.Vars(r)
-
-		temp.FRender(w, map[string]interface{}{
-			"page": r.Component,
-		})
-		//w.Write([]byte(html))
-	})
-
-	/*router.PathPrefix(basePath+r.Path).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		//vars := mux.Vars(r)
-
-		temp.FRender(w, map[string]interface{}{
-			"page": r.Component,
-		})
-		//w.Write([]byte(html))
-	})*/
-
-	return nil
 }

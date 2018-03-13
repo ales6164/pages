@@ -1,7 +1,7 @@
 package pages
 
 type Manifest struct {
-	Imports []string `json:"imports"`
+	Imports []*Import `json:"imports"`
 	Routes  []*Route `json:"routes"`
 }
 
@@ -9,6 +9,11 @@ type Manifest struct {
 	Src  string `json:"src"`
 	Type string `json:"type"`
 }*/
+
+type Import struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
 
 /*
 path is a string that uses the route matcher DSL.
