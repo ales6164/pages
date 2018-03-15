@@ -161,6 +161,9 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			return errors.New("can't find router outlet " + outlet)
 		}
 
+		if _, ok := p.documents[route.Component]; !ok {
+			return errors.New("trying to access undefined component " + route.Component)
+		}
 		component := p.documents[route.Component].Clone()
 		if component.Children().Length() == 0 {
 			return errors.New("component empty " + route.Component)
