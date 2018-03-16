@@ -3,21 +3,20 @@ package pages
 import (
 	"path"
 	"github.com/gorilla/mux"
-	"bytes"
 	"net/http"
 	"io/ioutil"
-	"github.com/cbroglie/mustache"
 	"github.com/PuerkitoBio/goquery"
 	"errors"
 	"regexp"
+	"path/filepath"
+	"bytes"
 )
 
 type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	partials   mustache.StaticProvider
-	templates  map[string]*mustache.Template
+	partials   map[string]string
 	documents  map[string]*goquery.Document
 	routeCount int
 }
@@ -30,6 +29,7 @@ type Options struct {
 
 var (
 	DefaultOutlet = "#outlet"
+	rePartial     = regexp.MustCompile(`\{\{\s*\>\s*(?P<partial>[a-zA-Z\-]+)\s*\}\}`)
 )
 
 func New(opt *Options) (*Pages, error) {
@@ -37,7 +37,7 @@ func New(opt *Options) (*Pages, error) {
 		Options:   opt,
 		Router:    mux.NewRouter(),
 		Manifest:  new(Manifest),
-		templates: map[string]*mustache.Template{},
+		partials:  map[string]string{},
 		documents: map[string]*goquery.Document{},
 	}
 
@@ -50,36 +50,63 @@ func New(opt *Options) (*Pages, error) {
 	// set base path from calling script absolute path and settings.json dir
 	p.base = path.Dir(p.JsonFilePath)
 
-	// parse templates
-	var partials = map[string]string{}
+	// read partials
 	for _, imp := range p.Imports {
-		if !path.IsAbs(imp.URL) {
-			imp.URL = path.Join(p.base, imp.URL)
+		if len(imp.URL) > 0 {
+			// single file definition
+			if !path.IsAbs(imp.URL) {
+				imp.URL = path.Join(p.base, imp.URL)
+			}
+
+			// read templates and load into map
+			templateBytes, err := ioutil.ReadFile(imp.URL)
+			if err != nil {
+				return p, err
+			}
+
+			p.partials[imp.Name] = string(templateBytes)
+		} else {
+			if !path.IsAbs(imp.Glob) {
+				imp.Glob = path.Join(p.base, imp.Glob)
+			}
+			fs, err := filepath.Glob(imp.Glob)
+			if err != nil {
+				return p, err
+			}
+
+			// read templates and load into map
+			for _, f := range fs {
+				templateBytes, err := ioutil.ReadFile(f)
+				if err != nil {
+					return p, err
+				}
+				name := path.Base(f)
+				name = name[0 : len(name)-len(path.Ext(name))]
+				if len(imp.Name) > 0 {
+					name = imp.Name + "." + name
+				}
+				p.partials[name] = string(templateBytes)
+			}
 		}
-
-		// read templates and load into map
-
-		templateBytes, err := ioutil.ReadFile(imp.URL)
-		if err != nil {
-			return p, err
-		}
-
-		partials[imp.Name] = string(templateBytes)
-
 	}
-
-	p.partials = mustache.StaticProvider{Partials: partials}
 
 	// parse partials and replace {{>partial}} with template
-	// is this even needed here?
-	for name, part := range partials {
-		p.templates[name], err = mustache.ParseStringPartials(part, &p.partials)
-		if err != nil {
-			return p, err
+	var parseAll = func() {
+		for name, part := range p.partials {
+			p.partials[name] = replaceAllGroupFunc(rePartial, part, func(groups []string) string {
+				//fmt.Print(groups[1])
+				return p.partials[groups[1]]
+			})
+
 		}
 	}
+	// gotta do it twice for the case of nested partials
+	parseAll()
+	parseAll()
 
-	for name, temp := range p.partials.Partials {
+
+
+	for name, temp := range p.partials {
 		buf := new(bytes.Buffer)
 		buf.WriteString(temp)
 		doc, err := goquery.NewDocumentFromReader(buf)
@@ -184,18 +211,18 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 	html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
 
-	temp, err := mustache.ParseStringPartials(html, &p.partials)
+	/*temp, err := mustache.ParseStringPartials(html, &p.partials)
 	if err != nil {
 		return err
-	}
+	}*/
 
 	r.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
 		//vars := mux.Vars(r)
 
-		temp.FRender(w, map[string]interface{}{
+		/*temp.FRender(w, map[string]interface{}{
 
-		})
-		//w.Write([]byte(html))
+		})*/
+		w.Write([]byte(html))
 	})
 
 	return err

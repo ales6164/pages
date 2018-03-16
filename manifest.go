@@ -2,7 +2,7 @@ package pages
 
 type Manifest struct {
 	Imports []*Import `json:"imports"`
-	Routes  []*Route `json:"routes"`
+	Routes  []*Route  `json:"routes"`
 }
 
 /*type Resource struct {
@@ -13,6 +13,7 @@ type Manifest struct {
 type Import struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
+	Glob string `json:"glob"`
 }
 
 /*
