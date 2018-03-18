@@ -4,19 +4,17 @@ import (
 	"path"
 	"github.com/gorilla/mux"
 	"net/http"
-	"io/ioutil"
 	"github.com/PuerkitoBio/goquery"
 	"errors"
 	"regexp"
 	"path/filepath"
-	"bytes"
 )
 
 type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	partials   map[string]string
+	components   map[string]*Component
 	documents  map[string]*goquery.Document
 	routeCount int
 }
@@ -29,7 +27,6 @@ type Options struct {
 
 var (
 	DefaultOutlet = "#outlet"
-	rePartial     = regexp.MustCompile(`\{\{\s*\>\s*(?P<partial>[a-zA-Z\-]+)\s*\}\}`)
 )
 
 func New(opt *Options) (*Pages, error) {
@@ -37,7 +34,7 @@ func New(opt *Options) (*Pages, error) {
 		Options:   opt,
 		Router:    mux.NewRouter(),
 		Manifest:  new(Manifest),
-		partials:  map[string]string{},
+		components:  map[string]*Component{},
 		documents: map[string]*goquery.Document{},
 	}
 
@@ -58,13 +55,10 @@ func New(opt *Options) (*Pages, error) {
 				imp.URL = path.Join(p.base, imp.URL)
 			}
 
-			// read templates and load into map
-			templateBytes, err := ioutil.ReadFile(imp.URL)
+			p.components[imp.Name], err = NewComponent(imp.Name, imp.URL)
 			if err != nil {
 				return p, err
 			}
-
-			p.partials[imp.Name] = string(templateBytes)
 		} else {
 			if !path.IsAbs(imp.Glob) {
 				imp.Glob = path.Join(p.base, imp.Glob)
@@ -76,44 +70,17 @@ func New(opt *Options) (*Pages, error) {
 
 			// read templates and load into map
 			for _, f := range fs {
-				templateBytes, err := ioutil.ReadFile(f)
-				if err != nil {
-					return p, err
-				}
 				name := path.Base(f)
 				name = name[0 : len(name)-len(path.Ext(name))]
 				if len(imp.Name) > 0 {
 					name = imp.Name + "." + name
 				}
-				p.partials[name] = string(templateBytes)
+				p.components[name], err = NewComponent(name, f)
+				if err != nil {
+					return p, err
+				}
 			}
 		}
-	}
-
-	// parse partials and replace {{>partial}} with template
-	var parseAll = func() {
-		for name, part := range p.partials {
-			p.partials[name] = replaceAllGroupFunc(rePartial, part, func(groups []string) string {
-				//fmt.Print(groups[1])
-				return p.partials[groups[1]]
-			})
-
-		}
-	}
-	// gotta do it twice for the case of nested partials
-	parseAll()
-	parseAll()
-
-
-
-	for name, temp := range p.partials {
-		buf := new(bytes.Buffer)
-		buf.WriteString(temp)
-		doc, err := goquery.NewDocumentFromReader(buf)
-		if err != nil {
-			return p, err
-		}
-		p.documents[name] = doc
 	}
 
 	return p, nil
