@@ -1,22 +1,20 @@
 package pages
 
 import (
-	"path"
 	"github.com/gorilla/mux"
 	"net/http"
 	"github.com/PuerkitoBio/goquery"
-	"errors"
-	"regexp"
 	"path/filepath"
+	"path"
 )
 
 type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	components   map[string]*Component
-	documents  map[string]*goquery.Document
+	components map[string]*Component
 	routeCount int
+	index      *goquery.Document
 }
 
 type Options struct {
@@ -31,11 +29,10 @@ var (
 
 func New(opt *Options) (*Pages, error) {
 	p := &Pages{
-		Options:   opt,
-		Router:    mux.NewRouter(),
-		Manifest:  new(Manifest),
-		components:  map[string]*Component{},
-		documents: map[string]*goquery.Document{},
+		Options:    opt,
+		Router:     mux.NewRouter(),
+		Manifest:   new(Manifest),
+		components: map[string]*Component{},
 	}
 
 	// read manifest
@@ -45,14 +42,14 @@ func New(opt *Options) (*Pages, error) {
 	}
 
 	// set base path from calling script absolute path and settings.json dir
-	p.base = path.Dir(p.JsonFilePath)
+	p.base = filepath.Dir(p.JsonFilePath)
 
 	// read partials
 	for _, imp := range p.Imports {
 		if len(imp.URL) > 0 {
 			// single file definition
-			if !path.IsAbs(imp.URL) {
-				imp.URL = path.Join(p.base, imp.URL)
+			if !filepath.IsAbs(imp.URL) {
+				imp.URL = filepath.Join(p.base, imp.URL)
 			}
 
 			p.components[imp.Name], err = NewComponent(imp.Name, imp.URL)
@@ -60,8 +57,8 @@ func New(opt *Options) (*Pages, error) {
 				return p, err
 			}
 		} else {
-			if !path.IsAbs(imp.Glob) {
-				imp.Glob = path.Join(p.base, imp.Glob)
+			if !filepath.IsAbs(imp.Glob) {
+				imp.Glob = filepath.Join(p.base, imp.Glob)
 			}
 			fs, err := filepath.Glob(imp.Glob)
 			if err != nil {
@@ -70,8 +67,8 @@ func New(opt *Options) (*Pages, error) {
 
 			// read templates and load into map
 			for _, f := range fs {
-				name := path.Base(f)
-				name = name[0 : len(name)-len(path.Ext(name))]
+				name := filepath.Base(f)
+				name = name[0 : len(name)-len(filepath.Ext(name))]
 				if len(imp.Name) > 0 {
 					name = imp.Name + "." + name
 				}
@@ -130,53 +127,10 @@ func (p *Pages) BuildRouter() (err error) {
 // one path can have multiple routes defined -> when having multiple routers on one page
 func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
 	//mux.NewRouter().PathPrefix(opt.HandlerPathPrefix).Subrouter(),
-	var document = p.documents["index"].Clone()
 
-	var done = map[int]bool{}
-	//var routesToHandle []*Route
-	for _, route := range routes {
-		// one path match with multiple routes
-		// how to handle multiple routes?
-		// compare if it's been handled already
 
-		if _, ok := done[route.id]; ok {
-			continue
-		}
-		done[route.id] = true
 
-		// set outlet
-		outlet := route.Outlet
-		if len(outlet) == 0 {
-			outlet = DefaultOutlet
-		}
-
-		outletSelection := document.Find(outlet)
-		if outletSelection.Length() == 0 {
-			return errors.New("can't find router outlet " + outlet)
-		}
-
-		if _, ok := p.documents[route.Component]; !ok {
-			return errors.New("trying to access undefined component " + route.Component)
-		}
-		component := p.documents[route.Component].Clone()
-		if component.Children().Length() == 0 {
-			return errors.New("component empty " + route.Component)
-		}
-
-		componentHtml, err := component.Html()
-		if err != nil {
-			return err
-		}
-
-		outletSelection.SetHtml(componentHtml)
-	}
-
-	html, err := document.Html()
-	if err != nil {
-		return err
-	}
-
-	html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
+	//html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
 
 	/*temp, err := mustache.ParseStringPartials(html, &p.partials)
 	if err != nil {
@@ -189,6 +143,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		/*temp.FRender(w, map[string]interface{}{
 
 		})*/
+		html, _ := p.RenderRoute(p.components["index"], routes)
 		w.Write([]byte(html))
 	})
 
