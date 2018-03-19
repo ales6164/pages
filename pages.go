@@ -6,6 +6,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"path/filepath"
 	"path"
+	"github.com/cbroglie/mustache"
 )
 
 type Pages struct {
@@ -15,6 +16,8 @@ type Pages struct {
 	components map[string]*Component
 	routeCount int
 	index      *goquery.Document
+
+	custom string
 }
 
 type Options struct {
@@ -70,7 +73,7 @@ func New(opt *Options) (*Pages, error) {
 				name := filepath.Base(f)
 				name = name[0 : len(name)-len(filepath.Ext(name))]
 				if len(imp.Name) > 0 {
-					name = imp.Name + "." + name
+					name = imp.Name + "-" + name
 				}
 				p.components[name], err = NewComponent(name, f)
 				if err != nil {
@@ -121,14 +124,25 @@ func (p *Pages) BuildRouter() (err error) {
 		}
 	}
 
+	// build custom.js
+	p.custom = "(function(){'use strict';"
+	for _, c := range p.components {
+		p.custom += c.JSTemplateLiteral()
+	}
+	p.custom += "})();"
+
+	// handle custom.js
+	p.Router.HandleFunc("/custom", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Write([]byte(p.custom))
+	})
+
 	return err
 }
 
 // one path can have multiple routes defined -> when having multiple routers on one page
 func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
 	//mux.NewRouter().PathPrefix(opt.HandlerPathPrefix).Subrouter(),
-
-
 
 	//html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
 
@@ -137,14 +151,17 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		return err
 	}*/
 
+	html, _ := p.RenderRoute(p.components["index"], routes)
+	temp, err := mustache.ParseString(html)
+	if err != nil {
+		return err
+	}
+
 	r.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
 		//vars := mux.Vars(r)
-
-		/*temp.FRender(w, map[string]interface{}{
-
-		})*/
-		html, _ := p.RenderRoute(p.components["index"], routes)
-		w.Write([]byte(html))
+		temp.FRender(w, map[string]interface{}{
+			"test": "Hello World!",
+		})
 	})
 
 	return err

@@ -19,9 +19,9 @@ var (
 
 //"customComponents.define(" + f.name + ",($,$$$)=>{let $$=$;return`"
 //"`}" + predefFuns + ");"
-func ConvertMustache(html string) string {
+func ConvertMustache(name string, html string) string {
 	t := new(Template)
-	return t.Compile(html)
+	return "customComponents.setTemplate('" + name + "',function($){let $$=$;return" + t.Compile(html) + "});"
 }
 
 // compile file
@@ -96,7 +96,7 @@ type funcWith struct {
 func FuncWith(matchedVar string, reversed bool) *funcWith {
 	return &funcWith{
 		matchedVar: matchedVar,
-		reversed: reversed,
+		reversed:   reversed,
 	}
 }
 

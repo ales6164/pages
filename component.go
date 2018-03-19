@@ -3,16 +3,15 @@ package pages
 import (
 	"github.com/PuerkitoBio/goquery"
 	"os"
-	"golang.org/x/net/html"
-	"strings"
-	"github.com/hoisie/mustache"
 	"errors"
+	"regexp"
 )
 
 type Component struct {
 	Name     string
+	Document *goquery.Document
 	Template *goquery.Selection
-	Script   *goquery.Selection
+	Script   string
 
 	isRealComponent     bool
 	isTemplateConverted bool
@@ -39,15 +38,7 @@ func NewComponent(name string, filePath string) (*Component, error) {
 	body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
 		if goquery.NodeName(selection) == "template" {
 			c.isRealComponent = true
-
-			//innerTemplate, _ := selection.Html()
-
-			/*buf := new(bytes.Buffer)
-			buf.WriteString("<" + c.Name + ">" + innerTemplate + "</" + c.Name + ">")
-			temp, _ := goquery.NewDocumentFromReader(buf)
-			buf.Reset()*/
-			c.Template = selection.Children()
-
+			c.Template = selection
 			return false
 		}
 		return true
@@ -58,57 +49,51 @@ func NewComponent(name string, filePath string) (*Component, error) {
 
 	if c.Template != nil {
 		// find <script>
-		/*body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
-			name := goquery.NodeName(selection)
-			if name == "script" {
-				c.Script = selection
+		body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
+			if goquery.NodeName(selection) == "script" {
+				c.Script, _ = selection.Html()
 				return false
 			}
 			return true
 		})
 		if err != nil {
 			return c, err
-		}*/
+		}
 	} else {
-		c.Template = doc.Selection
+		c.Document = doc
+		c.Template = body
 	}
 
 	return c, nil
 }
 
-func (p *Pages) Render(c *Component, content string, data interface{}) string {
-	doc := c.Template.Clone()
-	doc.Find("*").Each(func(i int, selection *goquery.Selection) {
-		name := goquery.NodeName(selection)
-		if c, ok := p.components[name]; ok {
-			selectionContent, _ := selection.Html()
-			selection.SetHtml(p.Render(c, selectionContent, data))
-		}
-	})
-	selHtml, _ := doc.Html()
-	return mustache.RenderInLayout(content, selHtml, data)
+var reContent = regexp.MustCompile(`\{\{\s*(?P<var>content+)\s*\}\}`)
+var setComponentContent = func(content, layout string) string {
+	return reContent.ReplaceAllString(layout, content)
 }
 
-func (p *Pages) Assemble(c *Component, content string, data interface{}) *goquery.Selection {
-	doc := c.Template.Clone()
+func (p *Pages) Assemble(c *Component, content string) (doc *goquery.Selection) {
+	doc = c.Template.Clone()
 	doc.Find("*").Each(func(i int, selection *goquery.Selection) {
 		name := goquery.NodeName(selection)
 		if child, ok := p.components[name]; ok {
 			selectionContent, _ := selection.Html()
-			assembledChild := p.Assemble(child, selectionContent, data)
-			//election.ReplaceWithSelection(assembledChild)
-			assembledChildHtml, _ := goquery.OuterHtml(assembledChild)
-			selection.ReplaceWithHtml("<" + child.Name + ">" + assembledChildHtml + "</" + child.Name + ">")
+			assembledChild := p.Assemble(child, selectionContent)
+			assembledChildHtml, _ := assembledChild.Html()
+			selection.SetHtml(assembledChildHtml)
 		}
 	})
 	selHtml, _ := doc.Html()
-	doc.SetHtml(mustache.RenderInLayout(content, selHtml, data))
+
+	// set innerHTML
+	doc.SetHtml(setComponentContent(content, selHtml))
+
 	return doc
 }
 
 func (p *Pages) RenderRoute(layout *Component, routes []*Route) (string, error) {
 	var outerHtml string
-	doc := p.Assemble(layout, "", nil)
+	doc := p.Assemble(layout, "")
 
 	var done = map[int]bool{}
 	//var routesToHandle []*Route
@@ -134,43 +119,27 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (string, error) 
 		}
 
 		if routeComponent, ok := p.components[route.Component]; ok {
-			outletSelection.SetHtml("<" + routeComponent.Name + ">" + p.Render(routeComponent, "", nil) + "</" + routeComponent.Name + ">")
+			assembled := p.Assemble(routeComponent, "")
+			assembledHtml, _ := assembled.Html()
+
+			outletSelection.SetHtml("<" + routeComponent.Name + ">" + assembledHtml + "</" + routeComponent.Name + ">")
 		} else {
 			return outerHtml, errors.New("trying to access undefined component " + route.Component)
 		}
 	}
 
-	return goquery.OuterHtml(doc)
-}
+	layout.Document.Find("body").ReplaceWithSelection(doc)
 
-type Matcher struct {
-	goquery.Matcher
-}
-
-func (m *Matcher) Match(node *html.Node) bool {
-	return strings.Contains(node.Namespace, "-")
-}
-
-func (m *Matcher) MatchAll(node *html.Node) []*html.Node {
-	if m.Match(node) {
-		return []*html.Node{node}
-	}
-	return nil
-}
-
-func (m *Matcher) Filter(node *html.Node) []*html.Node {
-	if m.Match(node) {
-		return []*html.Node{node}
-	}
-	return nil
+	return layout.Document.Html()
+	//return goquery.OuterHtml(doc)
 }
 
 func (c *Component) JSTemplateLiteral() string {
 	if c.isTemplateConverted {
 		return c.templateLiteral
 	}
-	html, _ := c.Template.Html()
-	c.templateLiteral = ConvertMustache(html)
+	h, _ := c.Template.Html()
+	c.templateLiteral = ConvertMustache(c.Name, h)
 	c.isTemplateConverted = true
 	return c.templateLiteral
 }
