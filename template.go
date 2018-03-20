@@ -14,7 +14,7 @@ type Template struct {
 }
 
 var (
-	reTemplate = regexp.MustCompile(`\{\{\s*(?P<tag>\>|\#|\/|\^|\!|)\s*(?P<var>[a-zA-Z\-]+)\s*\}\}`)
+	reTemplate = regexp.MustCompile(`\{\{\s*(?P<tag>\>|\#|\/|\^|\!|)\s*(?P<var>[a-zA-Z\-\.]+)\s*\}\}`)
 )
 
 //"customComponents.define(" + f.name + ",($,$$$)=>{let $$=$;return`"
@@ -72,11 +72,15 @@ func evalMatchedVar(matchedVar string, encapsulate bool) string {
 	if encapsulate {
 		if strings.HasPrefix(matchedVar, "$") {
 			return "${" + matchedVar + "}"
+		} else if matchedVar == "." {
+			return "${$$}"
 		}
 		return "${$$." + matchedVar + "}"
 	}
 	if strings.HasPrefix(matchedVar, "$") {
 		return matchedVar
+	} else if matchedVar == "." {
+		return "$$"
 	}
 	return "$$." + matchedVar
 }
@@ -102,7 +106,7 @@ func FuncWith(matchedVar string, reversed bool) *funcWith {
 
 func (f *funcWith) start() string {
 	if f.reversed {
-		return "${!" + f.matchedVar + "||" + f.matchedVar + ".constructor===Array?(($$)=>{$$=$$.constructor===Array?$$:[$$];return $$.reverse().map(($$, _i)=>{return`"
+		return "${!" + f.matchedVar + "||" + f.matchedVar + ".constructor===Array?(($$)=>{$$=$$&&$$.constructor===Array?$$:[$$];return $$.reverse().map(($$, _i)=>{return`"
 	}
 	return "${" + f.matchedVar + "?(($$)=>{$$=$$.constructor===Array?$$:[$$];return $$.map(($$, _i)=>{return`"
 }

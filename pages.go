@@ -125,11 +125,15 @@ func (p *Pages) BuildRouter() (err error) {
 	}
 
 	// build custom.js
-	p.custom = "(function(){'use strict';"
+	// add templates and scripts
+	p.custom = `(function(){'use strict';var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
 	for _, c := range p.components {
 		p.custom += c.JSTemplateLiteral()
+		p.custom += c.ComponentScript()
 	}
 	p.custom += "})();"
+	// add scripts
+
 
 	// handle custom.js
 	p.Router.HandleFunc("/custom", func(w http.ResponseWriter, req *http.Request) {

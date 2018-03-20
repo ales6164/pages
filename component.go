@@ -5,6 +5,7 @@ import (
 	"os"
 	"errors"
 	"regexp"
+	"fmt"
 )
 
 type Component struct {
@@ -51,7 +52,7 @@ func NewComponent(name string, filePath string) (*Component, error) {
 		// find <script>
 		body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
 			if goquery.NodeName(selection) == "script" {
-				c.Script, _ = selection.Html()
+				c.Script = selection.Text()
 				return false
 			}
 			return true
@@ -142,4 +143,8 @@ func (c *Component) JSTemplateLiteral() string {
 	c.templateLiteral = ConvertMustache(c.Name, h)
 	c.isTemplateConverted = true
 	return c.templateLiteral
+}
+
+func (c *Component) ComponentScript() string {
+	return "customComponents.define('" + c.Name + "',(function(){var module={};" + fmt.Sprint(c.Script) + ";return module})());"
 }
