@@ -126,7 +126,7 @@ func (p *Pages) BuildRouter() (err error) {
 
 	// build custom.js
 	// add templates and scripts
-	p.custom = `(function(){'use strict';var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
+	p.custom = `(function(){'use strict';var arr=function(s,v){return v?v.constructor===Array?v:[v]:[]};var rearr=function(s,v){return v?v.constructor===Array?v.reverse():[]:[v]};function html(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
 	for _, c := range p.components {
 		p.custom += c.JSTemplateLiteral()
 		p.custom += c.ComponentScript()

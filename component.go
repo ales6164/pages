@@ -140,7 +140,7 @@ func (c *Component) JSTemplateLiteral() string {
 		return c.templateLiteral
 	}
 	h, _ := c.Template.Html()
-	c.templateLiteral = ConvertMustache(c.Name, h)
+	c.templateLiteral = "customComponents.setTemplate('" + c.Name + "',function($){var $$=$;return" + ConvertMustache(h) + "});"
 	c.isTemplateConverted = true
 	return c.templateLiteral
 }
