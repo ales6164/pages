@@ -14,6 +14,7 @@ type Pages struct {
 	*Options
 	*Manifest
 	components map[string]*Component
+	layouts    map[string]*Layout
 	routeCount int
 	index      *goquery.Document
 
@@ -28,6 +29,7 @@ type Options struct {
 
 var (
 	DefaultOutlet = "#outlet"
+	DefaultLayout = "index"
 )
 
 func New(opt *Options) (*Pages, error) {
@@ -36,6 +38,7 @@ func New(opt *Options) (*Pages, error) {
 		Router:     mux.NewRouter(),
 		Manifest:   new(Manifest),
 		components: map[string]*Component{},
+		layouts:    map[string]*Layout{},
 	}
 
 	// read manifest
@@ -48,17 +51,35 @@ func New(opt *Options) (*Pages, error) {
 	p.base = filepath.Dir(p.JsonFilePath)
 
 	// read partials
-	var components []*Component
 	for _, imp := range p.Imports {
 		if len(imp.URL) > 0 {
 			// single file definition
 			if !filepath.IsAbs(imp.URL) {
 				imp.URL = filepath.Join(p.base, imp.URL)
 			}
-
-			p.components[imp.Name], err = NewComponent(imp.Name, imp.URL)
-			if err != nil {
-				return p, err
+			name := filepath.Base(imp.URL)
+			name = name[0 : len(name)-len(filepath.Ext(name))]
+			if len(imp.Prefix) > 0 {
+				name = imp.Prefix + "-" + name
+			}
+			if imp.IsLayout {
+				newL, err := NewLayout(imp.URL)
+				if err != nil {
+					return p, err
+				}
+				p.layouts[name] = newL
+				if err != nil {
+					return p, err
+				}
+			} else {
+				newC, err := NewComponent(name, imp.URL)
+				if err != nil {
+					return p, err
+				}
+				p.components[name] = newC
+				if err != nil {
+					return p, err
+				}
 			}
 		} else {
 			if !filepath.IsAbs(imp.Glob) {
@@ -73,21 +94,24 @@ func New(opt *Options) (*Pages, error) {
 			for _, f := range fs {
 				name := filepath.Base(f)
 				name = name[0 : len(name)-len(filepath.Ext(name))]
-				if len(imp.Name) > 0 {
-					name = imp.Name + "-" + name
+				if len(imp.Prefix) > 0 {
+					name = imp.Prefix + "-" + name
 				}
-				newC, err := NewComponent(name, f)
-				if err != nil {
-					return p, err
+				if imp.IsLayout {
+					newL, err := NewLayout(f)
+					if err != nil {
+						return p, err
+					}
+					p.layouts[name] = newL
+				} else {
+					newC, err := NewComponent(name, f)
+					if err != nil {
+						return p, err
+					}
+					p.components[name] = newC
 				}
-				components = append(components, newC)
-				p.components[name] = newC
 			}
 		}
-	}
-
-	for _, c := range components {
-		c.Parse(components)
 	}
 
 	return p, nil
@@ -141,7 +165,6 @@ func (p *Pages) BuildRouter() (err error) {
 	p.custom += "})();"
 	// add scripts
 
-
 	// handle custom.js
 	p.Router.HandleFunc("/custom", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
@@ -162,7 +185,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		return err
 	}*/
 
-	html, _ := p.RenderRoute(p.components["index"], routes)
+	html, _ := p.RenderRoute(p.layouts[DefaultLayout], routes)
 	temp, err := mustache.ParseString(html)
 	if err != nil {
 		return err

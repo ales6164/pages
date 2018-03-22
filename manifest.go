@@ -11,9 +11,10 @@ type Manifest struct {
 }*/
 
 type Import struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
-	Glob string `json:"glob"`
+	Prefix   string `json:"prefix"`
+	URL      string `json:"url"`
+	Glob     string `json:"glob"`
+	IsLayout bool   `json:"layout"`
 }
 
 /*

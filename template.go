@@ -16,7 +16,9 @@ type Template struct {
 }
 
 var (
-	reTemplate = regexp.MustCompile(`\{\{\s*(?P<tag>\>|\#|\/|\^|\!|)\s*(?P<var>[a-zA-Z\-\.\_]+)\s*\}\}`)
+	stacheRgx  = `\{\{\s*(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)\s*\}\}`
+	reTemplate = regexp.MustCompile(stacheRgx)
+	reDecode   = regexp.MustCompile(`<!--stache:` + stacheRgx + `-->`)
 )
 
 //"customComponents.define(" + f.name + ",($,$$$)=>{let $$=$;return`"
