@@ -3,9 +3,11 @@ package pages
 import (
 	"regexp"
 	"strings"
+	"bytes"
 )
 
 type Template struct {
+	dbgCtx  *bytes.Buffer
 	content string
 
 	i                   int
@@ -21,27 +23,41 @@ var (
 //"`}" + predefFuns + ");"
 func ConvertMustache(html string) string {
 	t := new(Template)
-	return t.Compile(html)
+	t.dbgCtx = new(bytes.Buffer)
+	return "\x60" + t.Compile(html) + "\x60"
+}
+
+func DebugConvertMustache(w *bytes.Buffer, html string) string {
+	t := new(Template)
+	t.dbgCtx = w
+	return "\x60" + t.Compile(html) + "\x60"
 }
 
 // compile file
 func (t *Template) Compile(html string) string {
-	return html
-
 	t.content = html
 
 	// escape single quotes
 	t.content = regexp.MustCompile("\x60").ReplaceAllString(t.content, "\\\x60")
 
+	t.dbgCtx.WriteString("compiling")
+
+	//var str []string
 	// compile into JS template literal
-	/*t.content = replaceAllGroupFunc(reTemplate, t.content, func(groups []string) string {
+	t.content = replaceAllGroupFunc(reTemplate, t.content, func(groups []string) string {
 		//fmt.Print(groups[1])
+		//str = append(str, groups[1])
+		//log.Infof(t.dbgCtx, "tag %s var %s", groups[1], groups[2])
+
+		t.dbgCtx.WriteString(groups[1])
+		t.dbgCtx.WriteString(groups[2] + "\n")
+
 		return t.replace(groups[1], groups[2])
-	})*/
+	})
 
 	//var str []string
 
-	t.content = reTemplate.ReplaceAllStringFunc(t.content, func(s string) string {
+	/*t.content = reTemplate.ReplaceAllStringFunc(t.content, func(s string) string {
 		s = strings.TrimPrefix(s, "{{")
 		s = strings.TrimSuffix(s, "}}")
 		s = strings.TrimSpace(s)
@@ -53,11 +69,11 @@ func (t *Template) Compile(html string) string {
 			s = strings.TrimSpace(s)
 		}
 
-		/*str = append(str, s)*/
+		//str = append(str, s)
 		return t.replace(matchedTag, s)
-	})
+	})*/
 
-	return "\x60" + t.content + "\x60"
+	return t.content
 }
 
 func (t *Template) replace(matchedTag, matchedVar string) (rendered string) {

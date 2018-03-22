@@ -2,94 +2,114 @@ package pages
 
 import (
 	"github.com/PuerkitoBio/goquery"
-	"os"
 	"errors"
 	"regexp"
 	"fmt"
+	"io/ioutil"
+	"strings"
 )
 
 type Component struct {
 	Name     string
 	Document *goquery.Document
-	Template *goquery.Selection
+	Template string
 	Script   string
 
+	isPartialParsed     bool
 	isRealComponent     bool
 	isTemplateConverted bool
 	templateLiteral     string
+
+	regex              *regexp.Regexp
+	foundSubComponents []*Component
 }
+
+var (
+	regTemplate = regexp.MustCompile(`<template[^>]*>([^$]+?)<\/template>`)
+	regScript   = regexp.MustCompile(`<script[^>]*>([^$]+?)<\/script>`)
+	regContent = regexp.MustCompile(`\{\{\s*(?P<var>content+)\s*\}\}`)
+	regRouter = regexp.MustCompile(`(<router-outlet[^>]*>)([^$]*)(<\/router-outlet>)`)
+)
 
 func NewComponent(name string, filePath string) (*Component, error) {
 	var c = new(Component)
 	c.Name = name
+	c.regex = regexp.MustCompile(`(<` + name + `[^>]*>)([^$]+?)(<\/` + name + `>)`)
 
-	f, err := os.Open(filePath)
+	fs, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return c, err
 	}
-	doc, err := goquery.NewDocumentFromReader(f)
-	if err != nil {
-		return c, err
-	}
-	f.Close()
 
-	body := doc.Find("body")
+	html := string(fs)
 
 	// find <template>
-	body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
-		if goquery.NodeName(selection) == "template" {
-			c.isRealComponent = true
-			c.Template = selection
-			return false
-		}
-		return true
-	})
-	if err != nil {
-		return c, err
-	}
+	c.Template = regTemplate.ReplaceAllString(html, `$1`)
 
-	if c.Template != nil {
-		// find <script>
-		body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
-			if goquery.NodeName(selection) == "script" {
-				c.Script = selection.Text()
-				return false
-			}
-			return true
-		})
-		if err != nil {
-			return c, err
-		}
-	} else {
-		c.Document = doc
-		c.Template = body
-	}
+	// find <script>
+	c.Script = regScript.ReplaceAllString(html, `$1`)
 
 	return c, nil
 }
 
-var reContent = regexp.MustCompile(`\{\{\s*(?P<var>content+)\s*\}\}`)
-var setComponentContent = func(content, layout string) string {
-	return reContent.ReplaceAllString(layout, content)
+// find sub components
+func (c *Component) Parse(provider []*Component) {
+	for _, p := range provider {
+		if p.regex.FindStringIndex(c.Template) != nil {
+			// this component has a sub component p
+			c.foundSubComponents = append(c.foundSubComponents, p)
+
+			if c == p {
+				panic(errors.New("component can't contain itself"))
+			}
+		}
+	}
 }
 
-func (p *Pages) Assemble(c *Component, content string) (doc *goquery.Selection) {
-	doc = c.Template.Clone()
-	doc.Find("*").Each(func(i int, selection *goquery.Selection) {
-		name := goquery.NodeName(selection)
-		if child, ok := p.components[name]; ok {
-			selectionContent, _ := selection.Html()
-			assembledChild := p.Assemble(child, selectionContent)
-			assembledChildHtml, _ := assembledChild.Html()
-			selection.SetHtml(assembledChildHtml)
-		}
-	})
-	selHtml, _ := doc.Html()
+func (p *Pages) Assemble(c *Component, content string) string {
+	doc := c.Template
 
-	// set innerHTML
-	doc.SetHtml(setComponentContent(content, selHtml))
+	for _, sc := range c.foundSubComponents {
+		// najdem celoten child componento tag v layoutu in ga nadomestim z assemblano verzijo
+		replaceAllGroupFunc(sc.regex, doc, func(groups []string) string {
+			// tukaj dobim content elementa
+			var tagStart = groups[1]
+			var content = groups[2]
+			var tagEnd = groups[3]
 
-	return doc
+			// nadaljujem z assemblanjem te sc componente kjer vstavim ta content notr
+			assembledChild := p.Assemble(sc, content)
+
+			// returnam assemblan string v regex
+			return tagStart + assembledChild + tagEnd
+		})
+	}
+
+	// tukaj še moram samo vstaviti content v obstoječ doc
+	return regContent.ReplaceAllString(doc, content)
+}
+
+func renderPage() {
+	doc := c.Template
+
+	for _, sc := range c.foundSubComponents {
+		// najdem celoten child componento tag v layoutu in ga nadomestim z assemblano verzijo
+		replaceAllGroupFunc(sc.regex, doc, func(groups []string) string {
+			// tukaj dobim content elementa
+			var tagStart = groups[1]
+			var content = groups[2]
+			var tagEnd = groups[3]
+
+			// nadaljujem z assemblanjem te sc componente kjer vstavim ta content notr
+			assembledChild := p.Assemble(sc, content)
+
+			// returnam assemblan string v regex
+			return tagStart + assembledChild + tagEnd
+		})
+	}
+
+	// tukaj še moram samo vstaviti content v obstoječ doc
+	return regContent.ReplaceAllString(doc, content)
 }
 
 func (p *Pages) RenderRoute(layout *Component, routes []*Route) (string, error) {
@@ -113,6 +133,8 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (string, error) 
 		if len(outlet) == 0 {
 			outlet = DefaultOutlet
 		}
+
+		// find router-outlet
 
 		outletSelection := doc.Find(outlet)
 		if outletSelection.Length() == 0 {
@@ -139,8 +161,8 @@ func (c *Component) JSTemplateLiteral() string {
 	if c.isTemplateConverted {
 		return c.templateLiteral
 	}
-	h, _ := c.Template.Html()
-	c.templateLiteral = "customComponents.setTemplate('" + c.Name + "',function($){var $$=$;return" + ConvertMustache(h) + "});"
+
+	c.templateLiteral = "customComponents.setTemplate('" + c.Name + "',function($){var $$=$;return" + ConvertMustache(c.Template) + "});"
 	c.isTemplateConverted = true
 	return c.templateLiteral
 }

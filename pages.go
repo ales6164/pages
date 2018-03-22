@@ -48,6 +48,7 @@ func New(opt *Options) (*Pages, error) {
 	p.base = filepath.Dir(p.JsonFilePath)
 
 	// read partials
+	var components []*Component
 	for _, imp := range p.Imports {
 		if len(imp.URL) > 0 {
 			// single file definition
@@ -75,12 +76,18 @@ func New(opt *Options) (*Pages, error) {
 				if len(imp.Name) > 0 {
 					name = imp.Name + "-" + name
 				}
-				p.components[name], err = NewComponent(name, f)
+				newC, err := NewComponent(name, f)
 				if err != nil {
 					return p, err
 				}
+				components = append(components, newC)
+				p.components[name] = newC
 			}
 		}
+	}
+
+	for _, c := range components {
+		c.Parse(components)
 	}
 
 	return p, nil
