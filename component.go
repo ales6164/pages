@@ -10,18 +10,14 @@ import (
 )
 
 type Component struct {
-	Name     string
-	Document *goquery.Document
-	Template *goquery.Selection
-	template string
-	Script string
+	Name             string
+	Template         *goquery.Selection
+	EncodedTemplate  string // encoded mustache template
+	Script           string
 
 	isRealComponent     bool
 	isTemplateConverted bool
 	templateLiteral     string
-
-	encodedTemplate string // encoded mustache template
-	encoded         map[string]Stache
 }
 
 type Layout struct {
@@ -30,13 +26,11 @@ type Layout struct {
 	isTemplateConverted bool
 	templateLiteral     string
 
-	encoded             map[string]Stache
-	encodedTemplate string // encoded mustache template
+	EncodedTemplate string // encoded mustache template
 }
 
 var (
-	regTemplate = regexp.MustCompile(`<template[^>]*>([^$]+?)<\/template>`)
-	regScript   = regexp.MustCompile(`<script[^>]*>([^$]+?)<\/script>`)
+	//regTemplate = regexp.MustCompile(`<template[^>]*>([^$]+?)<\/template>`)
 	regContent  = regexp.MustCompile(`<!--stache-content-->`)
 )
 
@@ -51,10 +45,10 @@ func NewLayout(filePath string) (*Layout, error) {
 	html := string(fs)
 
 	// encode all mustache tags as html comments for later use
-	l.encoded, l.encodedTemplate = Encode(html)
+	l.EncodedTemplate = Encode(html)
 
 	buf := new(bytes.Buffer)
-	buf.WriteString(l.encodedTemplate)
+	buf.WriteString(l.EncodedTemplate)
 	l.Document, err = goquery.NewDocumentFromReader(buf)
 
 	return l, err
@@ -70,36 +64,64 @@ func NewComponent(name string, filePath string) (*Component, error) {
 		return c, err
 	}
 
-	html := string(fs)
+	err = c.Parse(string(fs))
 
-	// find <template>
-	c.template = regTemplate.ReplaceAllString(html, `$1`)
-	// find <script>
-	c.Script = regScript.ReplaceAllString(html, `$1`)
-
-	// encode all mustache tags as html comments for later use
-	c.encoded, c.encodedTemplate = Encode(c.template)
-
-	buf := new(bytes.Buffer)
-	buf.WriteString(c.encodedTemplate)
-	doc, err := goquery.NewDocumentFromReader(buf)
-	if err != nil {
-		return c, err
-	}
-
-	c.Template = doc.Find("body")
-
-	return c, nil
+	return c, err
 }
 
-func (p *Pages) Assemble(s *goquery.Selection, content string) (doc *goquery.Selection) {
-	doc = s.Clone()
+func (c *Component) Parse(html string) error {
+	html = Encode(html)
+
+	buf := new(bytes.Buffer)
+	buf.WriteString(html)
+
+	doc, err := goquery.NewDocumentFromReader(buf)
+	if err != nil {
+		return err
+	}
+
+	body := doc.Find("body")
+
+	// find <template>
+	body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
+		if goquery.NodeName(selection) == "template" {
+			c.isRealComponent = true
+			c.EncodedTemplate, _ = selection.Html()
+			c.Template = selection
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return err
+	}
+
+	if c.Template != nil {
+		// find <script>
+		body.Children().EachWithBreak(func(i int, selection *goquery.Selection) bool {
+			if goquery.NodeName(selection) == "script" {
+				c.Script = selection.Text()
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		c.Template = body
+	}
+
+	return nil
+}
+
+func (p *Pages) Assemble(doc *goquery.Selection, content string) *goquery.Selection {
 	doc.Find("*").Each(func(i int, selection *goquery.Selection) {
 		name := goquery.NodeName(selection)
-		if child, ok := p.components[name]; ok {
-			selectionContent, _ := selection.Html()
-			assembledChild := p.Assemble(child.Template, selectionContent)
-			assembledChildHtml, _ := assembledChild.Html()
+		if child, ok := p.Components[name]; ok {
+			//selectionContent, _ := selection.Html() // element html content
+			assembledChild := p.Assemble(child.Template.Clone(), "") // assemble element with above content
+			assembledChildHtml, _ := assembledChild.Html()           // get new html content
 			selection.SetHtml(assembledChildHtml)
 		}
 	})
@@ -113,7 +135,7 @@ func (p *Pages) Assemble(s *goquery.Selection, content string) (doc *goquery.Sel
 
 func (p *Pages) RenderRoute(layout *Layout, routes []*Route) (string, error) {
 	var outerHtml string
-	body := p.Assemble(layout.Document.Find("body"), "")
+	body := p.Assemble(layout.Document.Find("body").Clone(), "")
 
 	var done = map[int]bool{}
 	//var routesToHandle []*Route
@@ -138,7 +160,7 @@ func (p *Pages) RenderRoute(layout *Layout, routes []*Route) (string, error) {
 			return outerHtml, errors.New("can't find router outlet " + outlet)
 		}
 
-		if routeComponent, ok := p.components[route.Component]; ok {
+		if routeComponent, ok := p.Components[route.Component]; ok {
 			assembled := p.Assemble(routeComponent.Template, "")
 			assembledHtml, _ := assembled.Html()
 
@@ -158,7 +180,7 @@ func (c *Component) JSTemplateLiteral() string {
 	if c.isTemplateConverted {
 		return c.templateLiteral
 	}
-	c.templateLiteral = "customComponents.setTemplate('" + c.Name + "',function($){var $$=$;return" + ConvertMustache(c.template) + "});"
+	c.templateLiteral = "customComponents.setTemplate('" + c.Name + "',function($){var $$=$;return html\x60" + ConvertMustache(Decode(c.EncodedTemplate), false) + "\x60});"
 	c.isTemplateConverted = true
 	return c.templateLiteral
 }

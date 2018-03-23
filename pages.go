@@ -3,7 +3,6 @@ package pages
 import (
 	"github.com/gorilla/mux"
 	"net/http"
-	"github.com/PuerkitoBio/goquery"
 	"path/filepath"
 	"path"
 	"github.com/cbroglie/mustache"
@@ -13,10 +12,9 @@ type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	components map[string]*Component
-	layouts    map[string]*Layout
+	Components map[string]*Component
+	Layouts    map[string]*Layout
 	routeCount int
-	index      *goquery.Document
 
 	custom string
 }
@@ -28,7 +26,7 @@ type Options struct {
 }
 
 var (
-	DefaultOutlet = "#outlet"
+	DefaultOutlet = "router-outlet"
 	DefaultLayout = "index"
 )
 
@@ -37,8 +35,8 @@ func New(opt *Options) (*Pages, error) {
 		Options:    opt,
 		Router:     mux.NewRouter(),
 		Manifest:   new(Manifest),
-		components: map[string]*Component{},
-		layouts:    map[string]*Layout{},
+		Components: map[string]*Component{},
+		Layouts:    map[string]*Layout{},
 	}
 
 	// read manifest
@@ -67,7 +65,7 @@ func New(opt *Options) (*Pages, error) {
 				if err != nil {
 					return p, err
 				}
-				p.layouts[name] = newL
+				p.Layouts[name] = newL
 				if err != nil {
 					return p, err
 				}
@@ -76,7 +74,7 @@ func New(opt *Options) (*Pages, error) {
 				if err != nil {
 					return p, err
 				}
-				p.components[name] = newC
+				p.Components[name] = newC
 				if err != nil {
 					return p, err
 				}
@@ -102,13 +100,13 @@ func New(opt *Options) (*Pages, error) {
 					if err != nil {
 						return p, err
 					}
-					p.layouts[name] = newL
+					p.Layouts[name] = newL
 				} else {
 					newC, err := NewComponent(name, f)
 					if err != nil {
 						return p, err
 					}
-					p.components[name] = newC
+					p.Components[name] = newC
 				}
 			}
 		}
@@ -157,8 +155,8 @@ func (p *Pages) BuildRouter() (err error) {
 
 	// build custom.js
 	// add templates and scripts
-	p.custom = `(function(){'use strict';var arr=function(s,v){return v?v.constructor===Array?v:[v]:[]};var rearr=function(s,v){return v?v.constructor===Array?v.reverse():[]:[v]};function html(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
-	for _, c := range p.components {
+	p.custom = `(function(){'use strict';var arr=function(v){return v!=null?v.constructor===Array?v:[v]:[]};var rearr=function(v){return v=v?v.constructor===Array?v.reverse():[]:[v]};function html(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
+	for _, c := range p.Components {
 		p.custom += c.JSTemplateLiteral()
 		p.custom += c.ComponentScript()
 	}
@@ -185,7 +183,8 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		return err
 	}*/
 
-	html, _ := p.RenderRoute(p.layouts[DefaultLayout], routes)
+	html, _ := p.RenderRoute(p.Layouts[DefaultLayout], routes)
+	html = Decode(html)
 	temp, err := mustache.ParseString(html)
 	if err != nil {
 		return err
@@ -193,9 +192,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 	r.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
 		//vars := mux.Vars(r)
-		temp.FRender(w, map[string]interface{}{
-			"test": "Hello World!",
-		})
+		temp.FRender(w, nil)
 	})
 
 	return err

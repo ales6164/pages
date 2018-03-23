@@ -16,27 +16,26 @@ type Template struct {
 }
 
 var (
-	stacheRgx  = `\{\{\s*(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)\s*\}\}`
-	reTemplate = regexp.MustCompile(stacheRgx)
-	reDecode   = regexp.MustCompile(`<!--stache:` + stacheRgx + `-->`)
+	reTemplate = regexp.MustCompile(`\{\{\s*(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)\s*\}\}`)
+	reDecode   = regexp.MustCompile(`(?:<|&lt;)!--stache:(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)--(?:>|&gt;)`)
 )
 
 //"customComponents.define(" + f.name + ",($,$$$)=>{let $$=$;return`"
 //"`}" + predefFuns + ");"
-func ConvertMustache(html string) string {
+func ConvertMustache(html string, decode bool) string {
 	t := new(Template)
 	t.dbgCtx = new(bytes.Buffer)
-	return "\x60" + t.Compile(html) + "\x60"
+	return t.Compile(html, decode)
 }
 
-func DebugConvertMustache(w *bytes.Buffer, html string) string {
+func DebugConvertMustache(w *bytes.Buffer, html string, decode bool) string {
 	t := new(Template)
 	t.dbgCtx = w
-	return "\x60" + t.Compile(html) + "\x60"
+	return t.Compile(html, decode)
 }
 
 // compile file
-func (t *Template) Compile(html string) string {
+func (t *Template) Compile(html string, decode bool) string {
 	t.content = html
 
 	// escape single quotes
@@ -46,7 +45,14 @@ func (t *Template) Compile(html string) string {
 
 	//var str []string
 	// compile into JS template literal
-	t.content = replaceAllGroupFunc(reTemplate, t.content, func(groups []string) string {
+	var reg *regexp.Regexp
+	if decode {
+		reg = reDecode
+	} else {
+		reg = reTemplate
+	}
+
+	t.content = replaceAllGroupFunc(reg, t.content, func(groups []string) string {
 		//fmt.Print(groups[1])
 		//str = append(str, groups[1])
 		//log.Infof(t.dbgCtx, "tag %s var %s", groups[1], groups[2])
@@ -155,9 +161,9 @@ func (f *funcWith) end() string {
 
 func (f *funcWith) start() string {
 	if f.reversed {
-		return "${rearr\x60${" + f.matchedVar + "}\x60.map(($$, _i)=>{html\x60"
+		return "${rearr(" + f.matchedVar + ").map(($$,_i)=>{html\x60"
 	}
-	return "${arr\x60${" + f.matchedVar + "}\x60.map(($$, _i)=>{html\x60"
+	return "${arr(" + f.matchedVar + ").map(($$,_i)=>{html\x60"
 }
 
 func (f *funcWith) end() string {
