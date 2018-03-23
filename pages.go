@@ -124,7 +124,12 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	newPath := path.Join(basePath, route.Path)
 
 	h[newPath] = append(h[newPath], parents...)
-	h[newPath] = append(h[newPath], route)
+
+	// this IF is because we don't want to render a path that has children by it's own - should always be rendered only when rendering with child path
+	if len(route.Children) == 0 {
+		h[newPath] = append(h[newPath], route)
+	}
+
 
 	if len(route.Children) > 0 {
 		ps := append(parents, route)
