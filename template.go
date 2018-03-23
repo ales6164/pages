@@ -161,9 +161,9 @@ func (f *funcWith) end() string {
 
 func (f *funcWith) start() string {
 	if f.reversed {
-		return "${rearr(" + f.matchedVar + ").map(($$,_i)=>{html\x60"
+		return "${rearr(" + f.matchedVar + ").map(($$,_i)=>{return html\x60"
 	}
-	return "${arr(" + f.matchedVar + ").map(($$,_i)=>{html\x60"
+	return "${arr(" + f.matchedVar + ").map(($$,_i)=>{return html\x60"
 }
 
 func (f *funcWith) end() string {
