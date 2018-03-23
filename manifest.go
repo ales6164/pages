@@ -38,6 +38,7 @@ type Route struct {
 	id        int // used for route handling
 	Path      string   `json:"path"`
 	Component string   `json:"component"`
+	Layout    string   `json:"layout"`
 	Outlet    string   `json:"outlet"`
 	Children  []*Route `json:"children"`
 

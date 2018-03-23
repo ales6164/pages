@@ -130,7 +130,6 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 		h[newPath] = append(h[newPath], route)
 	}
 
-
 	if len(route.Children) > 0 {
 		ps := append(parents, route)
 		for _, childRoute := range route.Children {
@@ -188,7 +187,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		return err
 	}*/
 
-	html, _ := p.RenderRoute(p.Layouts[DefaultLayout], routes)
+	var layout = DefaultLayout
+
+	if r := routes[0]; r != nil && len(r.Layout) > 0 {
+		layout = r.Layout
+	}
+
+	html, _ := p.RenderRoute(p.Layouts[layout], routes)
 	html = Decode(html)
 	temp, err := mustache.ParseString(html)
 	if err != nil {
