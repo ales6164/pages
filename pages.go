@@ -159,7 +159,7 @@ func (p *Pages) BuildRouter() (err error) {
 
 	// build custom.js
 	// add templates and scripts
-	p.custom = `(function(){'use strict';var arr=function(v){return v!=null?(v.constructor===Array?v:(v===false?Array(0):[v])):Array(0)};var rearr=function(v){return v=v?v.constructor===Array?v.reverse():Array(0):[v]};function html(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};var customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
+	p.custom = `(function(){'use strict';const arr=function(v){return v!=null?(v.constructor===Array?v:(v===false?Array(0):[v])):Array(0)};const rearr=function(v){return v=v?v.constructor===Array?v.reverse():Array(0):[v]};const html=function(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};const customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
 	for _, c := range p.Components {
 		p.custom += c.JSTemplateLiteral()
 		p.custom += c.ComponentScript()
@@ -168,7 +168,7 @@ func (p *Pages) BuildRouter() (err error) {
 	// add scripts
 
 	// handle custom.js
-	p.Router.HandleFunc("/custom", func(w http.ResponseWriter, req *http.Request) {
+	p.Router.HandleFunc("/custom.js", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(p.custom))
 	})
