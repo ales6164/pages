@@ -2,8 +2,8 @@ package pages
 
 import (
 	"regexp"
-	"strings"
 	"bytes"
+	"strings"
 )
 
 type Template struct {
@@ -16,8 +16,8 @@ type Template struct {
 }
 
 var (
-	reTemplate = regexp.MustCompile(`\{\{\s*(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)\s*\}\}`)
-	reDecode   = regexp.MustCompile(`(?:<|&lt;)!--stache:(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_]+)--(?:>|&gt;)`)
+	reTemplate = regexp.MustCompile(`\{\{\s*(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_\$]+)\s*\}\}`)
+	reDecode   = regexp.MustCompile(`(?:<|&lt;)!--stache:(\>|\#|\/|\^|\!|)\s*([a-zA-Z\-\.\_\$]+)--(?:>|&gt;)`)
 )
 
 //"customComponents.define(" + f.name + ",($,$$$)=>{let $$=$;return`"
