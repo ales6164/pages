@@ -12,7 +12,6 @@ type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
-	Handler    http.Handler
 	Components map[string]*Component
 	Layouts    map[string]*Layout
 	routeCount int
@@ -32,25 +31,16 @@ var (
 	DefaultLayout = "index"
 )
 
-type Server struct {
-	forceHTTPS bool
-	h        *mux.Router
-}
-
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "OPTIONS" {
-		return
-	}
-
-	if s.forceHTTPS {
-		if x := r.Header.Get("X-Forwarded-Proto"); len(x) > 0 {
-			if x == "http" {
-				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
-			}
+func HTTPSMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		x := r.Header.Get("x-forwarded-proto")
+		if x == "http" {
+			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
+			return
 		}
-	}
 
-	s.h.ServeHTTP(w, r)
+		h.ServeHTTP(w, r)
+	})
 }
 
 func New(opt *Options) (*Pages, error) {
@@ -135,8 +125,6 @@ func New(opt *Options) (*Pages, error) {
 		}
 	}
 
-	p.Handler = &Server{p.ForceSSL, p.Router}
-
 	return p, nil
 }
 
@@ -197,6 +185,10 @@ func (p *Pages) BuildRouter() (err error) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(p.custom))
 	})
+
+	if p.Options.ForceSSL {
+		p.Router.Use(HTTPSMiddleware)
+	}
 
 	return err
 }
