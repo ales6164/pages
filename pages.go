@@ -12,6 +12,7 @@ type Pages struct {
 	*mux.Router
 	*Options
 	*Manifest
+	Handler    http.Handler
 	Components map[string]*Component
 	Layouts    map[string]*Layout
 	routeCount int
@@ -23,12 +24,34 @@ type Options struct {
 	base         string
 	IsRendering  bool
 	JsonFilePath string
+	ForceSSL     bool
 }
 
 var (
 	DefaultOutlet = "router-outlet"
 	DefaultLayout = "index"
 )
+
+type Server struct {
+	forceHTTPS bool
+	h        *mux.Router
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "OPTIONS" {
+		return
+	}
+
+	if s.forceHTTPS {
+		if x := r.Header.Get("X-Forwarded-Proto"); len(x) > 0 {
+			if x == "http" {
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
+			}
+		}
+	}
+
+	s.h.ServeHTTP(w, r)
+}
 
 func New(opt *Options) (*Pages, error) {
 	p := &Pages{
@@ -111,6 +134,8 @@ func New(opt *Options) (*Pages, error) {
 			}
 		}
 	}
+
+	p.Handler = &Server{p.ForceSSL, p.Router}
 
 	return p, nil
 }
