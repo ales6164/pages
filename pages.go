@@ -152,8 +152,8 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	return h
 }
 
-func (p *Pages) BuildRouter() (err error) {
-	p.Router = mux.NewRouter()
+func (p *Pages) BuildRouter(pathPrefix string) (err error) {
+	p.Router = mux.NewRouter().PathPrefix(pathPrefix).Subrouter()
 	p.routeCount = -1
 
 	// attaches routes to paths - this way we don't have two Handlers for the same path
