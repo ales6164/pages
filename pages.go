@@ -135,6 +135,9 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	route.id = p.routeCount
 
 	newPath := path.Join(basePath, route.Path)
+	if route.Path == "/" {
+		newPath += "/"
+	}
 
 	h[newPath] = append(h[newPath], parents...)
 
