@@ -206,8 +206,10 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 	var layout = DefaultLayout
 
-	if r := routes[0]; r != nil && len(r.Layout) > 0 {
-		layout = r.Layout
+	if len(routes) > 0 {
+		if r := routes[0]; r != nil && len(r.Layout) > 0 {
+			layout = r.Layout
+		}
 	}
 
 	html, _ := p.RenderRoute(p.Layouts[layout], routes)
