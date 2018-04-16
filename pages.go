@@ -1,22 +1,25 @@
 package pages
 
 import (
-	"github.com/gorilla/mux"
 	"net/http"
 	"path/filepath"
 	"path"
-	"github.com/cbroglie/mustache"
+	"github.com/aymerick/raymond"
+	"regexp"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/urlfetch"
+	"bytes"
+	"encoding/json"
+	"github.com/julienschmidt/httprouter"
+	"io/ioutil"
 )
 
 type Pages struct {
-	*mux.Router
+	router     *httprouter.Router
 	*Options
 	*Manifest
 	Components map[string]*Component
-	Layouts    map[string]*Layout
 	routeCount int
-
-	custom string
 }
 
 type Options struct {
@@ -31,25 +34,22 @@ var (
 	DefaultLayout = "index"
 )
 
-func HTTPSMiddleware(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func HTTPSMiddleware(next httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		x := r.Header.Get("x-forwarded-proto")
 		if x == "http" {
 			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
 			return
 		}
-
-		h.ServeHTTP(w, r)
-	})
+		next(w, r, ps)
+	}
 }
 
 func New(opt *Options) (*Pages, error) {
 	p := &Pages{
 		Options:    opt,
-		Router:     mux.NewRouter(),
 		Manifest:   new(Manifest),
 		Components: map[string]*Component{},
-		Layouts:    map[string]*Layout{},
 	}
 
 	// read manifest
@@ -63,64 +63,18 @@ func New(opt *Options) (*Pages, error) {
 
 	// read partials
 	for _, imp := range p.Imports {
-		if len(imp.URL) > 0 {
+		if len(imp.Path) > 0 {
 			// single file definition
-			if !filepath.IsAbs(imp.URL) {
-				imp.URL = filepath.Join(p.base, imp.URL)
+			if !filepath.IsAbs(imp.Path) {
+				imp.Path = filepath.Join(p.base, imp.Path)
 			}
-			name := filepath.Base(imp.URL)
-			name = name[0 : len(name)-len(filepath.Ext(name))]
-			if len(imp.Prefix) > 0 {
-				name = imp.Prefix + "-" + name
-			}
-			if imp.IsLayout {
-				newL, err := NewLayout(imp.URL)
-				if err != nil {
-					return p, err
-				}
-				p.Layouts[name] = newL
-				if err != nil {
-					return p, err
-				}
-			} else {
-				newC, err := NewComponent(name, imp.URL)
-				if err != nil {
-					return p, err
-				}
-				p.Components[name] = newC
-				if err != nil {
-					return p, err
-				}
-			}
-		} else {
-			if !filepath.IsAbs(imp.Glob) {
-				imp.Glob = filepath.Join(p.base, imp.Glob)
-			}
-			fs, err := filepath.Glob(imp.Glob)
+			newC, err := NewComponent(imp.Name, imp.Path, imp.IsLayout)
 			if err != nil {
 				return p, err
 			}
-
-			// read templates and load into map
-			for _, f := range fs {
-				name := filepath.Base(f)
-				name = name[0 : len(name)-len(filepath.Ext(name))]
-				if len(imp.Prefix) > 0 {
-					name = imp.Prefix + "-" + name
-				}
-				if imp.IsLayout {
-					newL, err := NewLayout(f)
-					if err != nil {
-						return p, err
-					}
-					p.Layouts[name] = newL
-				} else {
-					newC, err := NewComponent(name, f)
-					if err != nil {
-						return p, err
-					}
-					p.Components[name] = newC
-				}
+			p.Components[imp.Name] = newC
+			if err != nil {
+				return p, err
 			}
 		}
 	}
@@ -155,8 +109,8 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	return h
 }
 
-func (p *Pages) BuildRouter(pathPrefix string) (err error) {
-	p.Router = mux.NewRouter().PathPrefix(pathPrefix).Subrouter()
+func (p *Pages) BuildRouter() (*httprouter.Router, error) {
+	p.router = httprouter.New()
 	p.routeCount = -1
 
 	// attaches routes to paths - this way we don't have two Handlers for the same path
@@ -167,46 +121,38 @@ func (p *Pages) BuildRouter(pathPrefix string) (err error) {
 	}
 
 	for routePath, routes := range handle {
-		err = p.handleRoute(p.Router, routePath, routes)
+		err := p.handleRoute(p.router, routePath, routes)
 		if err != nil {
-			return err
+			return p.router, err
 		}
 	}
 
-	// build custom.js
-	// add templates and scripts
-	p.custom = `(function(){'use strict';const arr=function(v){return v!=null?(v.constructor===Array?v:(v===false?Array(0):[v])):Array(0)};const rearr=function(v){return v=v?v.constructor===Array?v.reverse():Array(0):[v]};const html=function(a){for(var e=a.raw,f='',c=arguments.length,b=Array(1<c?c-1:0),d=1;d<c;d++)b[d-1]=arguments[d];return b.forEach(function(g,h){var j=e[h];Array.isArray(g)&&(g=g.join('')),f+=j,f+=g}),f+=e[e.length-1],f};const customComponents=new function(){this._templates={};this.setTemplate=function(name,templateFunc){this._templates[name]=templateFunc;};this.define=function(name,module){if(module&&module.hasOwnProperty('exports')){module.exports.prototype.template=this._templates[name];window.customElements.define(name,module.exports)}}};window['customComponents']=customComponents;`
-	for _, c := range p.Components {
-		p.custom += c.JSTemplateLiteral()
-		p.custom += c.ComponentScript()
+	// serve static files
+	files, err2 := ioutil.ReadDir("public")
+	if err2 == nil {
+		for _, file := range files {
+			if file.IsDir() {
+				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir("public"))
+			} else {
+				p.router.Handler(http.MethodGet, "/"+file.Name(), http.FileServer(http.Dir("public")))
+
+				/*p.router.GET("/"+file.Name(), func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+					dat, err := ioutil.ReadFile("public/" + file.Name())
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					w.Write(dat)
+				})*/
+			}
+		}
 	}
-	p.custom += "})();"
-	// add scripts
 
-	// handle custom.js
-	p.Router.HandleFunc("/custom.js", func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Write([]byte(p.custom))
-	})
-
-	if p.Options.ForceSSL {
-		p.Router.Use(HTTPSMiddleware)
-	}
-
-	return err
+	return p.router, nil
 }
 
 // one path can have multiple routes defined -> when having multiple routers on one page
-func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
-	//mux.NewRouter().PathPrefix(opt.HandlerPathPrefix).Subrouter(),
-
-	//html = regexp.MustCompile(`{{\s*(&gt;)`).ReplaceAllString(html, "{{>")
-
-	/*temp, err := mustache.ParseStringPartials(html, &p.partials)
-	if err != nil {
-		return err
-	}*/
-
+func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) (err error) {
 	var layout = DefaultLayout
 
 	if len(routes) > 0 {
@@ -215,17 +161,92 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	html, _ := p.RenderRoute(p.Layouts[layout], routes)
-	html = Decode(html)
-	temp, err := mustache.ParseString(html)
-	if err != nil {
-		return err
+	context, templ, apiUri, _ := p.RenderRoute(p.Components[layout], routes)
+
+	var hasApi = len(apiUri) > 0
+
+	var handleFunc httprouter.Handle = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		//vars := mux.Vars(r)
+		if hasApi {
+			resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
+				return ps.ByName(s)
+			})
+			ctx := appengine.NewContext(req)
+			client := urlfetch.Client(ctx)
+			resp, err := client.Get(resolvedApiUri)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(resp.Body)
+			var data map[string]interface{}
+			err = json.Unmarshal(buf.Bytes(), &data)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			context["data"] = data
+		}
+
+		html, err := templ.Exec(context)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte(html))
 	}
 
-	r.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
-		//vars := mux.Vars(r)
-		temp.FRender(w, nil)
-	})
+	if p.ForceSSL {
+		r.GET(path, HTTPSMiddleware(handleFunc))
+	} else {
+		r.GET(path, handleFunc)
+	}
 
 	return err
+}
+
+var (
+	regex = regexp.MustCompile(`\$(\w+)`)
+)
+
+func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, error) {
+	var ctx = map[string]interface{}{}
+	var body = layout.Template.Clone()
+	var apiUri string
+	var done = map[int]bool{}
+
+	//var routesToHandle []*Route
+	for _, route := range routes {
+		// one path match with multiple routes
+		// how to handle multiple routes?
+		// compare if it's been handled already
+
+		if _, ok := done[route.id]; ok {
+			continue
+		}
+		done[route.id] = true
+
+		// set outlet
+		outlet := route.Outlet
+		if len(outlet) == 0 {
+			outlet = DefaultOutlet
+		}
+
+		if len(route.Api) > 0 {
+			apiUri = route.Api
+		}
+
+		if route.Page != nil {
+			for k, v := range route.Page {
+				ctx[k] = v
+			}
+		}
+
+		component := p.Components[route.Component]
+
+		body.RegisterPartial(outlet, component.Raw)
+	}
+
+	return ctx, body, apiUri, nil
 }

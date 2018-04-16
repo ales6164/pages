@@ -11,9 +11,8 @@ type Manifest struct {
 }*/
 
 type Import struct {
-	Prefix   string `json:"prefix"`
-	URL      string `json:"url"`
-	Glob     string `json:"glob"`
+	Path     string `json:"path"`
+	Name     string `json:"name"`
 	IsLayout bool   `json:"layout"`
 }
 
@@ -36,11 +35,13 @@ loadChildren is a reference to lazy loaded child routes. See LoadChildren for mo
  */
 type Route struct {
 	id        int // used for route handling
-	Path      string   `json:"path"`
-	Component string   `json:"component"`
-	Layout    string   `json:"layout"`
-	Outlet    string   `json:"outlet"`
-	Children  []*Route `json:"children"`
+	Path      string                 `json:"path"`
+	Component string                 `json:"component"`
+	Layout    string                 `json:"layout"`
+	Api       string                 `json:"api"`
+	Outlet    string                 `json:"outlet"`
+	Children  []*Route               `json:"children"`
+	Page      map[string]interface{} `json:"page"`
 
 	CanActivate      interface{} `json:"canActivate"`      // not implemented
 	CanActivateChild interface{} `json:"canActivateChild"` // not implemented
@@ -49,12 +50,3 @@ type Route struct {
 
 	parents []*Route
 }
-
-/*
-type Alternative map[string]string
-
-type Auth struct {
-	Login     string `json:"login"`
-	SignInURL string `json:"sign_in_url"`
-}
-*/
