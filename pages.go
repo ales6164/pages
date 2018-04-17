@@ -132,7 +132,7 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 	if err2 == nil {
 		for _, file := range files {
 			if file.IsDir() {
-				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir("public"))
+				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir("public/"+file.Name()))
 			} else {
 				p.router.Handler(http.MethodGet, "/"+file.Name(), http.FileServer(http.Dir("public")))
 
@@ -166,12 +166,14 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 	var hasApi = len(apiUri) > 0
 
 	var handleFunc httprouter.Handle = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		//vars := mux.Vars(r)
+		ctx := appengine.NewContext(req)
+
 		if hasApi {
+
 			resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-				return ps.ByName(s)
+				return ps.ByName(s[1:])
 			})
-			ctx := appengine.NewContext(req)
+
 			client := urlfetch.Client(ctx)
 			resp, err := client.Get(resolvedApiUri)
 			if err != nil {
@@ -186,6 +188,7 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+
 			context["data"] = data
 		}
 
