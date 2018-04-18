@@ -128,22 +128,14 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 	}
 
 	// serve static files
-	files, err2 := ioutil.ReadDir("public")
+	public := path.Join(p.base, "public")
+	files, err2 := ioutil.ReadDir(public)
 	if err2 == nil {
 		for _, file := range files {
 			if file.IsDir() {
-				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir("public/"+file.Name()))
+				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir(path.Join(public, file.Name())))
 			} else {
-				p.router.Handler(http.MethodGet, "/"+file.Name(), http.FileServer(http.Dir("public")))
-
-				/*p.router.GET("/"+file.Name(), func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-					dat, err := ioutil.ReadFile("public/" + file.Name())
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-					w.Write(dat)
-				})*/
+				p.router.Handler(http.MethodGet, "/"+file.Name(), http.FileServer(http.Dir(public)))
 			}
 		}
 	}
