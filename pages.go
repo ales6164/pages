@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/url"
 
+	"github.com/pkg/errors"
 )
 
 type Pages struct {
@@ -155,7 +156,10 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 		}
 	}
 
-	context, templ, apiUri, _ := p.RenderRoute(p.Components[layout], routes)
+	context, templ, apiUri, err := p.RenderRoute(p.Components[layout], routes)
+	if err != nil {
+		return err
+	}
 
 	var hasApi = len(apiUri) > 0
 
@@ -257,9 +261,13 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			}
 		}
 
-		component := p.Components[route.Component]
+		if component, ok := p.Components[route.Component]; ok {
+			body.RegisterPartial(outlet, component.Raw)
+		} else {
+			return ctx, body, apiUri, errors.New("component " + route.Component + " doesn't exist")
+		}
 
-		body.RegisterPartial(outlet, component.Raw)
+
 	}
 
 	return ctx, body, apiUri, nil
