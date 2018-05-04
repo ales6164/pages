@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"github.com/julienschmidt/httprouter"
 	"io/ioutil"
+	"net/url"
+
 )
 
 type Pages struct {
@@ -166,8 +168,25 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 				return ps.ByName(s[1:])
 			})
 
+			// add query parameters to the api request
+
+			apiUrl, err := url.Parse(resolvedApiUri)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			apiUrlQuery := apiUrl.Query()
+			reqQuery := req.URL.Query()
+			for paramName, val := range reqQuery {
+				for _, v := range val {
+					apiUrlQuery.Add(paramName, v)
+				}
+			}
+			apiUrl.RawQuery = apiUrlQuery.Encode()
+
 			client := urlfetch.Client(ctx)
-			resp, err := client.Get(resolvedApiUri)
+			resp, err := client.Get(apiUrl.String())
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
