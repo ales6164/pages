@@ -13,8 +13,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"io/ioutil"
 	"net/url"
-
-	"github.com/pkg/errors"
+	"errors"
 )
 
 type Pages struct {
@@ -266,7 +265,6 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 		} else {
 			return ctx, body, apiUri, errors.New("component " + route.Component + " doesn't exist")
 		}
-
 
 	}
 
