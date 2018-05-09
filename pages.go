@@ -41,9 +41,9 @@ var (
 
 func (p *Pages) withMiddleware(next httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		proto := r.Header.Get("x-forwarded-proto")
 		if p.ForceSSL {
-			x := r.Header.Get("x-forwarded-proto")
-			if x == "http" {
+			if proto == "http" {
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
 				return
 			}
@@ -51,7 +51,7 @@ func (p *Pages) withMiddleware(next httprouter.Handle) httprouter.Handle {
 		if p.forceSubDomain {
 			x := strings.Split(r.Host, ".")
 			if x[0] != p.ForceSubDomain {
-				http.Redirect(w, r, p.ForceSubDomain+"."+r.Host+r.RequestURI, http.StatusMovedPermanently)
+				http.Redirect(w, r, "https://"+p.ForceSubDomain+"."+r.Host+r.RequestURI, http.StatusMovedPermanently)
 				return
 			}
 		}
