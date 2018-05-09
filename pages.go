@@ -228,7 +228,7 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 
 	p.forceSubDomain = len(p.ForceSubDomain) > 0
 
-	if p.ForceSSL || p.forceSubDomain {
+	if !appengine.IsDevAppServer() && (p.ForceSSL || p.forceSubDomain) {
 		r.GET(path, p.withMiddleware(handleFunc))
 	} else {
 		r.GET(path, handleFunc)
