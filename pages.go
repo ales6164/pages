@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/url"
 	"errors"
+	"strings"
 )
 
 type Pages struct {
@@ -25,10 +26,12 @@ type Pages struct {
 }
 
 type Options struct {
-	base         string
-	IsRendering  bool
-	JsonFilePath string
-	ForceSSL     bool
+	base           string
+	IsRendering    bool
+	JsonFilePath   string
+	ForceSSL       bool
+	ForceSubDomain string
+	forceSubDomain bool
 }
 
 var (
@@ -36,12 +39,21 @@ var (
 	DefaultLayout = "index"
 )
 
-func HTTPSMiddleware(next httprouter.Handle) httprouter.Handle {
+func (p *Pages) withMiddleware(next httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		x := r.Header.Get("x-forwarded-proto")
-		if x == "http" {
-			http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
-			return
+		if p.ForceSSL {
+			x := r.Header.Get("x-forwarded-proto")
+			if x == "http" {
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
+				return
+			}
+		}
+		if p.forceSubDomain {
+			x := strings.Split(r.Host, ".")
+			if x[0] != p.ForceSubDomain {
+				http.Redirect(w, r, p.ForceSubDomain+"."+r.Host+r.RequestURI, http.StatusMovedPermanently)
+				return
+			}
 		}
 		next(w, r, ps)
 	}
@@ -214,8 +226,10 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 		w.Write([]byte(html))
 	}
 
-	if p.ForceSSL {
-		r.GET(path, HTTPSMiddleware(handleFunc))
+	p.forceSubDomain = len(p.ForceSubDomain) > 0
+
+	if p.ForceSSL || p.forceSubDomain {
+		r.GET(path, p.withMiddleware(handleFunc))
 	} else {
 		r.GET(path, handleFunc)
 	}
