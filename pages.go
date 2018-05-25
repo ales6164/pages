@@ -1,20 +1,20 @@
 package pages
 
 import (
+	"github.com/julienschmidt/httprouter"
 	"net/http"
+	"strings"
 	"path/filepath"
 	"path"
-	"github.com/aymerick/raymond"
-	"regexp"
+	"io/ioutil"
 	"google.golang.org/appengine"
+	"net/url"
 	"google.golang.org/appengine/urlfetch"
 	"bytes"
 	"encoding/json"
-	"github.com/julienschmidt/httprouter"
-	"io/ioutil"
-	"net/url"
+	"regexp"
+	"github.com/aymerick/raymond"
 	"errors"
-	"strings"
 )
 
 type Pages struct {
@@ -32,6 +32,7 @@ type Options struct {
 	ForceSSL       bool
 	ForceSubDomain string
 	forceSubDomain bool
+
 }
 
 var (
