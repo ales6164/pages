@@ -32,7 +32,6 @@ type Options struct {
 	ForceSSL       bool
 	ForceSubDomain string
 	forceSubDomain bool
-
 }
 
 var (
@@ -178,14 +177,15 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 	var handleFunc httprouter.Handle = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
 		ctx := appengine.NewContext(req)
 
+		context["query"] = map[string]string{}
+
+		resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
+			context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
+			return ps.ByName(s[1:])
+		})
+
+		// add query parameters to the api request
 		if hasApi {
-
-			resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-				return ps.ByName(s[1:])
-			})
-
-			// add query parameters to the api request
-
 			apiUrl, err := url.Parse(resolvedApiUri)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -218,6 +218,9 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 
 			context["data"] = data
 		}
+
+		jsonContext, _ := json.Marshal(context)
+		context["json"] = string(jsonContext)
 
 		html, err := templ.Exec(context)
 		if err != nil {
