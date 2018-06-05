@@ -179,13 +179,17 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 
 		context["query"] = map[string]string{}
 
-		resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-			context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
-			return ps.ByName(s[1:])
-		})
+		for _, v := range ps {
+			context["query"].(map[string]string)[v.Key] = v.Value
+		}
 
 		// add query parameters to the api request
 		if hasApi {
+			resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
+				context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
+				return ps.ByName(s[1:])
+			})
+
 			apiUrl, err := url.Parse(resolvedApiUri)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
