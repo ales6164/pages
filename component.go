@@ -3,6 +3,7 @@ package pages
 import (
 	"io/ioutil"
 	"github.com/aymerick/raymond"
+	"github.com/ales6164/apis/errors"
 )
 
 type Component struct {
@@ -25,7 +26,10 @@ func NewComponent(name string, filePath string, isLayout bool) (*Component, erro
 
 	c.Raw = string(fs)
 	raymond.RegisterPartial(c.Name, c.Raw)
-	c.Template = raymond.MustParse(c.Raw)
+	c.Template, err = raymond.Parse(c.Raw)
+	if err != nil {
+		return c, errors.New("error parsing file: " + filePath + "; " + err.Error())
+	}
 
-	return c, err
+	return c, nil
 }
