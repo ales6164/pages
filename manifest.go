@@ -1,14 +1,15 @@
 package pages
 
 type Manifest struct {
-	Imports []*Import `json:"imports"`
-	Routes  []*Route  `json:"routes"`
+	DefaultLocale string     `json:"defaultLocale"`
+	Imports       []*Import  `json:"imports"`
+	Routes        []*Route   `json:"routes"`
+	Resources     *Resources `json:"resources"`
 }
 
-/*type Resource struct {
-	Src  string `json:"src"`
-	Type string `json:"type"`
-}*/
+type Resources struct {
+	Translations map[string]map[string]string `json:"translations"`
+}
 
 type Import struct {
 	Path     string `json:"path"`

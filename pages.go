@@ -15,10 +15,13 @@ import (
 	"regexp"
 	"github.com/aymerick/raymond"
 	"errors"
+	"github.com/gorilla/sessions"
 )
 
 type Pages struct {
-	router     *httprouter.Router
+	router  *httprouter.Router
+	session *sessions.CookieStore
+	locale  string // current locale
 	*Options
 	*Manifest
 	Components map[string]*Component
@@ -26,12 +29,14 @@ type Pages struct {
 }
 
 type Options struct {
-	base           string
-	IsRendering    bool
-	JsonFilePath   string
-	ForceSSL       bool
-	ForceSubDomain string
-	forceSubDomain bool
+	base               string
+	IsRendering        bool
+	JsonFilePath       string
+	ForceSSL           bool
+	EnableSessionStore bool
+	SessionKey         []byte // key must be 16, 24 or 32 bytes long (AES-128, AES-192 or AES-256)
+	ForceSubDomain     string
+	forceSubDomain     bool
 }
 
 var (
@@ -64,6 +69,13 @@ func New(opt *Options) (*Pages, error) {
 		Options:    opt,
 		Manifest:   new(Manifest),
 		Components: map[string]*Component{},
+	}
+
+	if opt.EnableSessionStore {
+		if len(opt.SessionKey) == 0 || len(opt.SessionKey)%8 != 0 {
+			return p, errors.New("invalid session store key length")
+		}
+		p.session = sessions.NewCookieStore(opt.SessionKey)
 	}
 
 	// read manifest
@@ -127,6 +139,11 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 	p.router = httprouter.New()
 	p.routeCount = -1
 
+	// add i18n helper
+	raymond.RegisterHelper("i18n", func(key string) string {
+		return p.Manifest.Resources.Translations[p.locale][key]
+	})
+
 	// attaches routes to paths - this way we don't have two Handlers for the same path
 
 	var handle = map[string][]*Route{}
@@ -182,6 +199,15 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 		for _, v := range ps {
 			context["query"].(map[string]string)[v.Key] = v.Value
 		}
+
+		// read lang
+		p.locale = p.DefaultLocale
+		if lang, err := req.Cookie("lang"); err == nil {
+			p.locale = lang.Value
+		} else {
+			req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
+		}
+		context["locale"] = p.locale
 
 		// add query parameters to the api request
 		if hasApi {
