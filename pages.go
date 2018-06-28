@@ -84,6 +84,15 @@ func New(opt *Options) (*Pages, error) {
 		return p, err
 	}
 
+	// add necessary fields
+	if p.Manifest.Resources == nil {
+		p.Manifest.Resources = &Resources{
+			Translations: map[string]map[string]string{},
+		}
+	} else if p.Manifest.Resources.Translations == nil {
+		p.Manifest.Resources.Translations = map[string]map[string]string{}
+	}
+
 	// set base path from calling script absolute path and settings.json dir
 	p.base = filepath.Dir(p.JsonFilePath)
 
@@ -208,6 +217,7 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 			req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 		}
 		context["locale"] = p.locale
+		context["translations"] = p.Resources.Translations[p.locale]
 
 		// add query parameters to the api request
 		if hasApi {
