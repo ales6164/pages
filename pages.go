@@ -180,6 +180,18 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 		}
 	}
 
+	// serve components
+	p.router.Handle(http.MethodGet, "/"+p.Manifest.ComponentsVersion+".js", func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+		var lang = r.URL.Query().Get("lang")
+		if len(lang) == 0 {
+			lang = p.DefaultLocale
+		}
+
+		res, _ := json.Marshal(p.Resources.Translations[lang])
+
+		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
+	})
+
 	return p.router, nil
 }
 
