@@ -45,11 +45,11 @@ type Route struct {
 	Outlet    string                 `json:"outlet"`
 	Children  []*Route               `json:"children"`
 	Page      map[string]interface{} `json:"page"`
+	Redirect  string                 `json:"redirect"`
 
 	CanActivate      interface{} `json:"canActivate"`      // not implemented
 	CanActivateChild interface{} `json:"canActivateChild"` // not implemented
 	PathMatch        interface{} `json:"pathMatch"`        // not implemented
-	RedirectTo       interface{} `json:"redirectTo"`       // not implemented
 
 	parents []*Route
 }

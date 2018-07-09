@@ -205,81 +205,88 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 		}
 	}
 
-	context, templ, apiUri, err := p.RenderRoute(p.Components[layout], routes)
+	context, templ, apiUri, redirect, err := p.RenderRoute(p.Components[layout], routes)
 	if err != nil {
 		return err
 	}
 
 	var hasApi = len(apiUri) > 0
 
-	var handleFunc httprouter.Handle = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		ctx := appengine.NewContext(req)
-
-		context["query"] = map[string]string{}
-
-		for _, v := range ps {
-			context["query"].(map[string]string)[v.Key] = v.Value
+	var handleFunc httprouter.Handle
+	if len(redirect) > 0 {
+		handleFunc = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+			http.Redirect(w, req, redirect, http.StatusPermanentRedirect)
 		}
+	} else {
+		handleFunc = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+			ctx := appengine.NewContext(req)
 
-		// read lang
-		p.locale = p.DefaultLocale
-		if lang, err := req.Cookie("lang"); err == nil {
-			p.locale = lang.Value
-		} else {
-			req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
-		}
-		context["locale"] = p.locale
-		//context["translations"] = p.Resources.Translations[p.locale]
+			context["query"] = map[string]string{}
 
-		// add query parameters to the api request
-		if hasApi {
-			resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-				context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
-				return ps.ByName(s[1:])
-			})
-
-			apiUrl, err := url.Parse(resolvedApiUri)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+			for _, v := range ps {
+				context["query"].(map[string]string)[v.Key] = v.Value
 			}
 
-			apiUrlQuery := apiUrl.Query()
-			reqQuery := req.URL.Query()
-			for paramName, val := range reqQuery {
-				for _, v := range val {
-					apiUrlQuery.Add(paramName, v)
+			// read lang
+			p.locale = p.DefaultLocale
+			if lang, err := req.Cookie("lang"); err == nil {
+				p.locale = lang.Value
+			} else {
+				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
+			}
+			context["locale"] = p.locale
+			//context["translations"] = p.Resources.Translations[p.locale]
+
+			// add query parameters to the api request
+			if hasApi {
+				resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
+					context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
+					return ps.ByName(s[1:])
+				})
+
+				apiUrl, err := url.Parse(resolvedApiUri)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
 				}
-			}
-			apiUrl.RawQuery = apiUrlQuery.Encode()
 
-			client := urlfetch.Client(ctx)
-			resp, err := client.Get(apiUrl.String())
+				apiUrlQuery := apiUrl.Query()
+				reqQuery := req.URL.Query()
+				for paramName, val := range reqQuery {
+					for _, v := range val {
+						apiUrlQuery.Add(paramName, v)
+					}
+				}
+				apiUrl.RawQuery = apiUrlQuery.Encode()
+
+				client := urlfetch.Client(ctx)
+				resp, err := client.Get(apiUrl.String())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(resp.Body)
+				var data map[string]interface{}
+				err = json.Unmarshal(buf.Bytes(), &data)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				context["data"] = data
+			}
+
+			jsonContext, _ := json.Marshal(context)
+			context["json"] = string(jsonContext)
+
+			html, err := templ.Exec(context)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			buf := new(bytes.Buffer)
-			buf.ReadFrom(resp.Body)
-			var data map[string]interface{}
-			err = json.Unmarshal(buf.Bytes(), &data)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			context["data"] = data
+			w.Write([]byte(html))
 		}
-
-		jsonContext, _ := json.Marshal(context)
-		context["json"] = string(jsonContext)
-
-		html, err := templ.Exec(context)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Write([]byte(html))
 	}
 
 	p.forceSubDomain = len(p.ForceSubDomain) > 0
@@ -297,10 +304,11 @@ var (
 	regex = regexp.MustCompile(`\$(\w+)`)
 )
 
-func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, error) {
+func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, string, error) {
 	var ctx = map[string]interface{}{}
 	var body = layout.Template.Clone()
 	var apiUri string
+	var redirect string
 	var done = map[int]bool{}
 
 	//var routesToHandle []*Route
@@ -313,6 +321,12 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			continue
 		}
 		done[route.id] = true
+
+		// redirect?
+		if len(route.Redirect) > 0 {
+			redirect = route.Redirect
+			break
+		}
 
 		// set outlet
 		outlet := route.Outlet
@@ -333,10 +347,10 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 		if component, ok := p.Components[route.Component]; ok {
 			body.RegisterPartial(outlet, component.Raw)
 		} else {
-			return ctx, body, apiUri, errors.New("component " + route.Component + " doesn't exist")
+			return ctx, body, apiUri, redirect, errors.New("component " + route.Component + " doesn't exist")
 		}
 
 	}
 
-	return ctx, body, apiUri, nil
+	return ctx, body, apiUri, redirect, nil
 }
