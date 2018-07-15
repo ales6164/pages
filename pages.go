@@ -1,12 +1,10 @@
 package pages
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"strings"
 	"path/filepath"
 	"path"
-	"io/ioutil"
 	"google.golang.org/appengine"
 	"net/url"
 	"google.golang.org/appengine/urlfetch"
@@ -16,12 +14,15 @@ import (
 	"github.com/aymerick/raymond"
 	"errors"
 	"github.com/gorilla/sessions"
+	"io/ioutil"
+
+	"github.com/gorilla/mux"
 )
 
 type Pages struct {
-	router  *httprouter.Router
-	session *sessions.CookieStore
-	locale  string // current locale
+	router     *mux.Router
+	session    *sessions.CookieStore
+	locale     string // current locale
 	*Options
 	*Manifest
 	Components map[string]*Component
@@ -44,8 +45,8 @@ var (
 	DefaultLayout = "index"
 )
 
-func (p *Pages) withMiddleware(next httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (p *Pages) withMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proto := r.Header.Get("x-forwarded-proto")
 		if p.ForceSSL {
 			if proto == "http" {
@@ -60,8 +61,8 @@ func (p *Pages) withMiddleware(next httprouter.Handle) httprouter.Handle {
 				return
 			}
 		}
-		next(w, r, ps)
-	}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func New(opt *Options) (*Pages, error) {
@@ -144,8 +145,8 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	return h
 }
 
-func (p *Pages) BuildRouter() (*httprouter.Router, error) {
-	p.router = httprouter.New()
+func (p *Pages) BuildRouter() (*mux.Router, error) {
+	p.router = mux.NewRouter()
 	p.routeCount = -1
 
 	// add i18n helper
@@ -153,8 +154,30 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 		return p.Manifest.Resources.Translations[p.locale][key]
 	})
 
-	// attaches routes to paths - this way we don't have two Handlers for the same path
+	// serve components
+	p.router.HandleFunc("/"+p.Manifest.ComponentsVersion+".js", func(w http.ResponseWriter, r *http.Request) {
+		var lang = r.URL.Query().Get("lang")
+		if len(lang) == 0 {
+			lang = p.DefaultLocale
+		}
+		res, _ := json.Marshal(p.Resources.Translations[lang])
+		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
+	})
 
+	// serve static files
+	public := path.Join(p.base, "public")
+	files, err2 := ioutil.ReadDir(public)
+	if err2 == nil {
+		for _, file := range files {
+			if file.IsDir() {
+				p.router.PathPrefix("/" + file.Name()).Handler(http.StripPrefix("/"+file.Name(), http.FileServer(http.Dir(path.Join(public, file.Name())))))
+			} else {
+				p.router.Handle("/"+file.Name(), http.FileServer(http.Dir(public)))
+			}
+		}
+	}
+
+	// attaches routes to paths - this way we don't have two Handlers for the same path
 	var handle = map[string][]*Route{}
 	for _, route := range p.Routes {
 		handle = p.iter(handle, route, "/", nil)
@@ -167,36 +190,11 @@ func (p *Pages) BuildRouter() (*httprouter.Router, error) {
 		}
 	}
 
-	// serve static files
-	public := path.Join(p.base, "public")
-	files, err2 := ioutil.ReadDir(public)
-	if err2 == nil {
-		for _, file := range files {
-			if file.IsDir() {
-				p.router.ServeFiles("/"+file.Name()+"/*filepath", http.Dir(path.Join(public, file.Name())))
-			} else {
-				p.router.Handler(http.MethodGet, "/"+file.Name(), http.FileServer(http.Dir(public)))
-			}
-		}
-	}
-
-	// serve components
-	p.router.Handle(http.MethodGet, "/"+p.Manifest.ComponentsVersion+".js", func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-		var lang = r.URL.Query().Get("lang")
-		if len(lang) == 0 {
-			lang = p.DefaultLocale
-		}
-
-		res, _ := json.Marshal(p.Resources.Translations[lang])
-
-		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
-	})
-
 	return p.router, nil
 }
 
 // one path can have multiple routes defined -> when having multiple routers on one page
-func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) (err error) {
+func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
 	var layout = DefaultLayout
 
 	if len(routes) > 0 {
@@ -212,19 +210,20 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 
 	var hasApi = len(apiUri) > 0
 
-	var handleFunc httprouter.Handle
+	var handleFunc http.HandlerFunc
 	if len(redirect) > 0 {
-		handleFunc = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			http.Redirect(w, req, redirect, http.StatusPermanentRedirect)
 		}
 	} else {
-		handleFunc = func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			ctx := appengine.NewContext(req)
 
 			context["query"] = map[string]string{}
 
-			for _, v := range ps {
-				context["query"].(map[string]string)[v.Key] = v.Value
+			vars := mux.Vars(req)
+			for key, val := range vars {
+				context["query"].(map[string]string)[key] = val
 			}
 
 			// read lang
@@ -240,8 +239,8 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 			// add query parameters to the api request
 			if hasApi {
 				resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-					context["query"].(map[string]string)[s[1:]] = ps.ByName(s[1:])
-					return ps.ByName(s[1:])
+					context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+					return vars[s[1:]]
 				})
 
 				apiUrl, err := url.Parse(resolvedApiUri)
@@ -291,11 +290,7 @@ func (p *Pages) handleRoute(r *httprouter.Router, path string, routes []*Route) 
 
 	p.forceSubDomain = len(p.ForceSubDomain) > 0
 
-	if !appengine.IsDevAppServer() && (p.ForceSSL || p.forceSubDomain) {
-		r.GET(path, p.withMiddleware(handleFunc))
-	} else {
-		r.GET(path, handleFunc)
-	}
+	r.HandleFunc(path, handleFunc)
 
 	return err
 }
@@ -344,10 +339,12 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			}
 		}
 
-		if component, ok := p.Components[route.Component]; ok {
-			body.RegisterPartial(outlet, component.Raw)
-		} else {
-			return ctx, body, apiUri, redirect, errors.New("component " + route.Component + " doesn't exist")
+		if len(route.Component) > 0 {
+			if component, ok := p.Components[route.Component]; ok {
+				body.RegisterPartial(outlet, component.Raw)
+			} else {
+				return ctx, body, apiUri, redirect, errors.New("component " + route.Component + " doesn't exist")
+			}
 		}
 
 	}
