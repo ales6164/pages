@@ -290,7 +290,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 	p.forceSubDomain = len(p.ForceSubDomain) > 0
 
-	r.HandleFunc(path, handleFunc)
+	r.Handle(path, p.withMiddleware(handleFunc))
 
 	return err
 }
