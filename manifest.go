@@ -11,6 +11,7 @@ type Manifest struct {
 
 type Resources struct {
 	Translations map[string]map[string]string `json:"translations"`
+	Storage      map[string]interface{}       `json:"storage"`
 }
 
 type Import struct {

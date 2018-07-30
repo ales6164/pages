@@ -20,9 +20,9 @@ import (
 )
 
 type Pages struct {
-	router     *mux.Router
-	session    *sessions.CookieStore
-	locale     string // current locale
+	router  *mux.Router
+	session *sessions.CookieStore
+	locale  string // current locale
 	*Options
 	*Manifest
 	Components map[string]*Component
@@ -160,7 +160,11 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		if len(lang) == 0 {
 			lang = p.DefaultLocale
 		}
-		res, _ := json.Marshal(p.Resources.Translations[lang])
+		resources := map[string]interface{}{
+			"translations": p.Resources.Translations[lang],
+			"storage":      p.Resources.Storage,
+		}
+		res, _ := json.Marshal(resources)
 		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
 	})
 
@@ -234,7 +238,6 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
 			context["locale"] = p.locale
-			//context["translations"] = p.Resources.Translations[p.locale]
 
 			// add query parameters to the api request
 			if hasApi {
