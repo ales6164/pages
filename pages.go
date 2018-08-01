@@ -154,6 +154,12 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return p.Manifest.Resources.Translations[p.locale][key]
 	})
 
+	// add json helper
+	raymond.RegisterHelper("json", func(k interface{}) string {
+		d, _ := json.Marshal(k)
+		return string(d)
+	})
+
 	// serve components
 	p.router.HandleFunc("/"+p.Manifest.ComponentsVersion+".js", func(w http.ResponseWriter, r *http.Request) {
 		var lang = r.URL.Query().Get("lang")
