@@ -104,7 +104,7 @@ func New(opt *Options) (*Pages, error) {
 			if !filepath.IsAbs(imp.Path) {
 				imp.Path = filepath.Join(p.base, imp.Path)
 			}
-			newC, err := NewComponent(imp.Name, imp.Path, imp.IsLayout)
+			newC, err := NewComponent(imp.Name, imp.Path, imp.IsLayout, imp.Render)
 			if err != nil {
 				return p, err
 			}
@@ -350,7 +350,11 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 
 		if len(route.Component) > 0 {
 			if component, ok := p.Components[route.Component]; ok {
-				body.RegisterPartial(outlet, component.Raw)
+				if component.Render {
+					body.RegisterPartial(outlet, "<"+component.Name+">"+component.Raw+"</"+component.Name+">")
+				} else {
+					body.RegisterPartial(outlet, "<"+component.Name+"></"+component.Name+">")
+				}
 			} else {
 				return ctx, body, apiUri, redirect, errors.New("component " + route.Component + " doesn't exist")
 			}

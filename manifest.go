@@ -18,6 +18,7 @@ type Import struct {
 	Path     string `json:"path"`
 	Name     string `json:"name"`
 	IsLayout bool   `json:"layout"`
+	Render   bool   `json:"render"`
 }
 
 /*

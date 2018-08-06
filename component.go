@@ -10,14 +10,16 @@ type Component struct {
 	Name     string
 	Template *raymond.Template
 	Raw      string
+	Render   bool
 
 	isLayout bool
 }
 
-func NewComponent(name string, filePath string, isLayout bool) (*Component, error) {
+func NewComponent(name, filePath string, isLayout, render bool) (*Component, error) {
 	var c = new(Component)
 	c.Name = name
 	c.isLayout = isLayout
+	c.Render = render
 
 	fs, err := ioutil.ReadFile(filePath)
 	if err != nil {
@@ -25,7 +27,7 @@ func NewComponent(name string, filePath string, isLayout bool) (*Component, erro
 	}
 
 	c.Raw = string(fs)
-	raymond.RegisterPartial(c.Name, c.Raw)
+	raymond.RegisterPartial(c.Name, "<"+c.Name+">"+c.Raw+"</"+c.Name+">")
 	c.Template, err = raymond.Parse(c.Raw)
 	if err != nil {
 		return c, errors.New("error parsing file: " + filePath + "; " + err.Error())
