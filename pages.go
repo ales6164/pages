@@ -203,6 +203,8 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	return p.router, nil
 }
 
+var cachedPages = map[string][]byte{}
+
 // one path can have multiple routes defined -> when having multiple routers on one page
 func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
 	var layout = DefaultLayout
@@ -213,7 +215,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	context, templ, apiUri, redirect, err := p.RenderRoute(p.Components[layout], routes)
+	context, templ, apiUri, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
 	if err != nil {
 		return err
 	}
@@ -224,6 +226,91 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 	if len(redirect) > 0 {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			http.Redirect(w, req, redirect, http.StatusPermanentRedirect)
+		}
+	} else if cache {
+		handleFunc = func(w http.ResponseWriter, req *http.Request) {
+			ctx := appengine.NewContext(req)
+
+			var cacheKey = req.URL.Host + "/" + req.URL.Path
+
+			if it, ok := cachedPages[cacheKey]; ok {
+				w.Write(it)
+				return
+			}
+
+			context["query"] = map[string]string{}
+
+			vars := mux.Vars(req)
+			for key, val := range vars {
+				context["query"].(map[string]string)[key] = val
+			}
+
+			// read lang
+			p.locale = p.DefaultLocale
+			if lang, err := req.Cookie("lang"); err == nil {
+				p.locale = lang.Value
+			} else {
+				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
+			}
+			context["locale"] = p.locale
+
+			// add query parameters to the api request
+			if hasApi {
+				resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
+					context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+					return vars[s[1:]]
+				})
+
+				apiUrl, err := url.Parse(resolvedApiUri)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				apiUrlQuery := apiUrl.Query()
+				reqQuery := req.URL.Query()
+				for paramName, val := range reqQuery {
+					for _, v := range val {
+						apiUrlQuery.Add(paramName, v)
+					}
+				}
+				apiUrl.RawQuery = apiUrlQuery.Encode()
+
+				client := urlfetch.Client(ctx)
+				resp, err := client.Get(apiUrl.String())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(resp.Body)
+				var data map[string]interface{}
+				err = json.Unmarshal(buf.Bytes(), &data)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				context["data"] = data
+			}
+
+			jsonContext, _ := json.Marshal(context)
+			context["json"] = string(jsonContext)
+
+			html, err := templ.Exec(context)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Write([]byte(html))
+
+			cachedPages[cacheKey] = []byte(html)
+
+			/*memcache.Set(ctx, &memcache.Item{
+				Key:        req.URL.Host + "/" + req.URL.Path,
+				Value:      []byte(html),
+				Expiration: time.Hour * 24,
+			})*/
 		}
 	} else {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
@@ -308,12 +395,13 @@ var (
 	regex = regexp.MustCompile(`\$(\w+)`)
 )
 
-func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, string, error) {
+func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, string, bool, error) {
 	var ctx = map[string]interface{}{}
 	var body = layout.Template.Clone()
 	var apiUri string
 	var redirect string
 	var done = map[int]bool{}
+	var cache bool
 
 	//var routesToHandle []*Route
 	for _, route := range routes {
@@ -325,6 +413,10 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			continue
 		}
 		done[route.id] = true
+
+		if !cache && route.Cache {
+			cache = route.Cache
+		}
 
 		// redirect?
 		if len(route.Redirect) > 0 {
@@ -356,11 +448,11 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 					body.RegisterPartial(outlet, "<"+component.Name+"></"+component.Name+">")
 				}
 			} else {
-				return ctx, body, apiUri, redirect, errors.New("component " + route.Component + " doesn't exist")
+				return ctx, body, apiUri, redirect, cache, errors.New("component " + route.Component + " doesn't exist")
 			}
 		}
 
 	}
 
-	return ctx, body, apiUri, redirect, nil
+	return ctx, body, apiUri, redirect, cache, nil
 }

@@ -48,6 +48,7 @@ type Route struct {
 	Children  []*Route               `json:"children"`
 	Page      map[string]interface{} `json:"page"`
 	Redirect  string                 `json:"redirect"`
+	Cache     bool                   `json:"cache"`
 
 	CanActivate      interface{} `json:"canActivate"`      // not implemented
 	CanActivateChild interface{} `json:"canActivateChild"` // not implemented
