@@ -99,12 +99,19 @@ func New(opt *Options) (*Pages, error) {
 
 	// read partials
 	for _, imp := range p.Imports {
-		if len(imp.Path) > 0 {
-			// single file definition
-			if !filepath.IsAbs(imp.Path) {
-				imp.Path = filepath.Join(p.base, imp.Path)
+		if len(imp.ComponentPath) > 0 {
+			if !filepath.IsAbs(imp.ComponentPath) {
+				imp.ComponentPath = filepath.Join(p.base, imp.ComponentPath)
 			}
-			newC, err := NewComponent(imp.Name, imp.Path, imp.IsLayout, imp.Render)
+		}
+		if len(imp.TemplatePath) > 0 {
+
+			// single file definition
+			if !filepath.IsAbs(imp.TemplatePath) {
+				imp.TemplatePath = filepath.Join(p.base, imp.TemplatePath)
+			}
+
+			newC, err := NewComponent(imp)
 			if err != nil {
 				return p, err
 			}
@@ -173,6 +180,14 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		res, _ := json.Marshal(resources)
 		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
 	})
+
+	// serve self-contained components
+	for _, c := range p.Components {
+		p.router.HandleFunc("/"+c.Name+".component.js", func(writer http.ResponseWriter, request *http.Request) {
+			writer.Header().Set("Content-Type", "application/javascript")
+			writer.Write(c.RawSelfContained)
+		})
+	}
 
 	// serve static files
 	public := path.Join(p.base, "public")

@@ -15,10 +15,11 @@ type Resources struct {
 }
 
 type Import struct {
-	Path     string `json:"path"`
-	Name     string `json:"name"`
-	IsLayout bool   `json:"layout"`
-	Render   bool   `json:"render"`
+	TemplatePath  string `json:"templatePath"`
+	ComponentPath string `json:"componentPath"`
+	Name          string `json:"name"`
+	IsLayout      bool   `json:"layout"`
+	Render        bool   `json:"render"`
 }
 
 /*
