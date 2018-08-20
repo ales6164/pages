@@ -240,7 +240,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 	var handleFunc http.HandlerFunc
 	if len(redirect) > 0 {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
-			http.Redirect(w, req, redirect, http.StatusPermanentRedirect)
+			vars := mux.Vars(req)
+
+			resolvedRedirectUri := regex.ReplaceAllStringFunc(redirect, func(s string) string {
+				return vars[s[1:]]
+			})
+
+			http.Redirect(w, req,resolvedRedirectUri, http.StatusPermanentRedirect)
 		}
 	} else if cache {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
