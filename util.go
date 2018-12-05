@@ -2,10 +2,13 @@ package pages
 
 import (
 	"encoding/json"
+	"google.golang.org/appengine"
 	"io/ioutil"
-	"regexp"
-	"time"
 	"math/rand"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -14,6 +17,7 @@ const (
 	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
 	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
+
 var src = rand.NewSource(time.Now().UnixNano())
 
 func RandStringBytesMaskImprSrc(n int) string {
@@ -33,7 +37,6 @@ func RandStringBytesMaskImprSrc(n int) string {
 
 	return string(b)
 }
-
 
 func readAndUnmarshal(filePath string, v interface{}) error {
 	file, err := ioutil.ReadFile(filePath)
@@ -55,4 +58,22 @@ func replaceAllGroupFunc(re *regexp.Regexp, str string, repl func([]string) stri
 		lastIndex = v[1]
 	}
 	return result + str[lastIndex:]
+}
+
+// getHost tries its best to return the request host.
+func getHost(r *http.Request) string {
+	var host = r.URL.Host
+	if r.URL.IsAbs() {
+		host = r.Host
+		// Slice off any port information.
+		if i := strings.Index(host, ":"); i != -1 {
+			host = host[:i]
+		}
+	}
+	if len(host) == 0 {
+		if appengine.IsDevAppServer() {
+			host = appengine.DefaultVersionHostname(appengine.NewContext(r))
+		}
+	}
+	return host
 }

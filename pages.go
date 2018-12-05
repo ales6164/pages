@@ -1,22 +1,20 @@
 package pages
 
 import (
-	"net/http"
-	"strings"
-	"path/filepath"
-	"path"
-	"google.golang.org/appengine"
-	"net/url"
-	"google.golang.org/appengine/urlfetch"
 	"bytes"
 	"encoding/json"
-	"regexp"
-	"github.com/aymerick/raymond"
 	"errors"
-	"github.com/gorilla/sessions"
-	"io/ioutil"
-
+	"github.com/aymerick/raymond"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/urlfetch"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"path"
+	"path/filepath"
+	"regexp"
 )
 
 type Pages struct {
@@ -36,8 +34,8 @@ type Options struct {
 	ForceSSL           bool
 	EnableSessionStore bool
 	SessionKey         []byte // key must be 16, 24 or 32 bytes long (AES-128, AES-192 or AES-256)
-	ForceSubDomain     string
-	forceSubDomain     bool
+	ForceHostname      string
+	forceHostname      bool
 }
 
 var (
@@ -54,12 +52,9 @@ func (p *Pages) withMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if p.forceSubDomain {
-			x := strings.Split(r.Host, ".")
-			if x[0] != p.ForceSubDomain {
-				http.Redirect(w, r, "https://"+p.ForceSubDomain+"."+r.Host+r.RequestURI, http.StatusMovedPermanently)
-				return
-			}
+		if p.forceHostname && getHost(r) != p.ForceHostname {
+			http.Redirect(w, r, "https://"+p.ForceHostname+r.RequestURI, http.StatusMovedPermanently)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -246,7 +241,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				return vars[s[1:]]
 			})
 
-			http.Redirect(w, req,resolvedRedirectUri, http.StatusPermanentRedirect)
+			http.Redirect(w, req, resolvedRedirectUri, http.StatusPermanentRedirect)
 		}
 	} else if cache {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
@@ -405,7 +400,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	p.forceSubDomain = len(p.ForceSubDomain) > 0
+	p.forceHostname = len(p.ForceHostname) > 0
 
 	r.Handle(path, p.withMiddleware(handleFunc))
 
