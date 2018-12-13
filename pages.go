@@ -294,8 +294,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 				client := urlfetch.Client(ctx)
 				resp, err := client.Get(apiUrl.String())
+				if resp.StatusCode != http.StatusOK {
+					http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
+					return
+				}
 				if err != nil {
-					http.Error(w, err.Error(), resp.StatusCode)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				buf := new(bytes.Buffer)
@@ -372,8 +376,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 				client := urlfetch.Client(ctx)
 				resp, err := client.Get(apiUrl.String())
+				if resp.StatusCode != http.StatusOK {
+					http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
+					return
+				}
 				if err != nil {
-					http.Error(w, err.Error(), resp.StatusCode)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
 				buf := new(bytes.Buffer)
