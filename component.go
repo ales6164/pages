@@ -1,9 +1,9 @@
 package pages
 
 import (
-	"io/ioutil"
+	"errors"
 	"github.com/aymerick/raymond"
-	"github.com/ales6164/apis/errors"
+	"io/ioutil"
 )
 
 type Component struct {
