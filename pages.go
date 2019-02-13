@@ -225,12 +225,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	context, templ, apiUri, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
+	context, templ, requests, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
 	if err != nil {
 		return err
 	}
 
-	var hasApi = len(apiUri) > 0
+	var hasApi = len(requests) > 0
 
 	var handleFunc http.HandlerFunc
 	if len(redirect) > 0 {
@@ -272,46 +272,61 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			// add query parameters to the api request
 			if hasApi {
-				resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-					context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
-					return vars[s[1:]]
-				})
+				var dataArray = map[int]interface{}{}
 
-				apiUrl, err := url.Parse(resolvedApiUri)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
+				for index, r := range requests {
+					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
+						context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+						return vars[s[1:]]
+					})
 
-				apiUrlQuery := apiUrl.Query()
-				reqQuery := req.URL.Query()
-				for paramName, val := range reqQuery {
-					for _, v := range val {
-						apiUrlQuery.Add(paramName, v)
+					apiUrl, err := url.Parse(resolvedApiUri)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
 					}
-				}
-				apiUrl.RawQuery = apiUrlQuery.Encode()
 
-				client := urlfetch.Client(ctx)
-				resp, err := client.Get(apiUrl.String())
-				if resp.StatusCode != http.StatusOK {
-					http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
-					return
-				}
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(resp.Body)
-				var data map[string]interface{}
-				err = json.Unmarshal(buf.Bytes(), &data)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
+					apiUrlQuery := apiUrl.Query()
+					reqQuery := req.URL.Query()
+					for paramName, val := range reqQuery {
+						for _, v := range val {
+							apiUrlQuery.Add(paramName, v)
+						}
+					}
+					apiUrl.RawQuery = apiUrlQuery.Encode()
+
+					client := urlfetch.Client(ctx)
+
+					req, err := http.NewRequest(r.Method, apiUrl.String(), nil)
+					for key, value := range r.Headers {
+						req.Header.Add(key, value)
+					}
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+
+					resp, err := client.Do(req)
+					if resp.StatusCode != http.StatusOK {
+						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
+						return
+					}
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					buf := new(bytes.Buffer)
+					buf.ReadFrom(resp.Body)
+					var data interface{}
+					err = json.Unmarshal(buf.Bytes(), &data)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					dataArray[index] = data
 				}
 
-				context["data"] = data
+				context["data"] = dataArray
 			}
 
 			jsonContext, _ := json.Marshal(context)
@@ -354,46 +369,61 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			// add query parameters to the api request
 			if hasApi {
-				resolvedApiUri := regex.ReplaceAllStringFunc(apiUri, func(s string) string {
-					context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
-					return vars[s[1:]]
-				})
+				var dataArray = map[int]interface{}{}
 
-				apiUrl, err := url.Parse(resolvedApiUri)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
+				for index, r := range requests {
+					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
+						context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+						return vars[s[1:]]
+					})
 
-				apiUrlQuery := apiUrl.Query()
-				reqQuery := req.URL.Query()
-				for paramName, val := range reqQuery {
-					for _, v := range val {
-						apiUrlQuery.Add(paramName, v)
+					apiUrl, err := url.Parse(resolvedApiUri)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
 					}
-				}
-				apiUrl.RawQuery = apiUrlQuery.Encode()
 
-				client := urlfetch.Client(ctx)
-				resp, err := client.Get(apiUrl.String())
-				if resp.StatusCode != http.StatusOK {
-					http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
-					return
-				}
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(resp.Body)
-				var data map[string]interface{}
-				err = json.Unmarshal(buf.Bytes(), &data)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
+					apiUrlQuery := apiUrl.Query()
+					reqQuery := req.URL.Query()
+					for paramName, val := range reqQuery {
+						for _, v := range val {
+							apiUrlQuery.Add(paramName, v)
+						}
+					}
+					apiUrl.RawQuery = apiUrlQuery.Encode()
+
+					client := urlfetch.Client(ctx)
+
+					req, err := http.NewRequest(r.Method, apiUrl.String(), nil)
+					for key, value := range r.Headers {
+						req.Header.Add(key, value)
+					}
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+
+					resp, err := client.Do(req)
+					if resp.StatusCode != http.StatusOK {
+						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
+						return
+					}
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					buf := new(bytes.Buffer)
+					buf.ReadFrom(resp.Body)
+					var data interface{}
+					err = json.Unmarshal(buf.Bytes(), &data)
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					dataArray[index] = data
 				}
 
-				context["data"] = data
+				context["data"] = dataArray
 			}
 
 			jsonContext, _ := json.Marshal(context)
@@ -419,10 +449,10 @@ var (
 	regex = regexp.MustCompile(`\$(\w+)`)
 )
 
-func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, string, string, bool, error) {
+func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, []Request, string, bool, error) {
 	var ctx = map[string]interface{}{}
 	var body = layout.Template.Clone()
-	var apiUri string
+	var requests []Request
 	var redirect string
 	var done = map[int]bool{}
 	var cache bool
@@ -454,9 +484,7 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			outlet = DefaultOutlet
 		}
 
-		if len(route.Api) > 0 {
-			apiUri = route.Api
-		}
+		requests = route.Requests
 
 		if route.Page != nil {
 			for k, v := range route.Page {
@@ -472,11 +500,11 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 					body.RegisterPartial(outlet, "<"+component.Name+"></"+component.Name+">")
 				}
 			} else {
-				return ctx, body, apiUri, redirect, cache, errors.New("component " + route.Component + " doesn't exist")
+				return ctx, body, requests, redirect, cache, errors.New("component " + route.Component + " doesn't exist")
 			}
 		}
 
 	}
 
-	return ctx, body, apiUri, redirect, cache, nil
+	return ctx, body, requests, redirect, cache, nil
 }

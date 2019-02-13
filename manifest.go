@@ -38,13 +38,13 @@ resolve is a map of DI tokens used to look up data resolvers. See Resolve for mo
 runGuardsAndResolvers defines when guards and resolvers will be run. By default they run only when the matrix parameters of the route change. When set to paramsOrQueryParamsChange they will also run when query params change. And when set to always, they will run every time.
 children is an array of child route definitions.
 loadChildren is a reference to lazy loaded child routes. See LoadChildren for more info.
- */
+*/
 type Route struct {
-	id        int // used for route handling
+	id        int                    // used for route handling
 	Path      string                 `json:"path"`
 	Component string                 `json:"component"`
 	Layout    string                 `json:"layout"`
-	Api       string                 `json:"api"`
+	Requests  []Request              `json:"requests"`
 	Outlet    string                 `json:"outlet"`
 	Children  []*Route               `json:"children"`
 	Page      map[string]interface{} `json:"page"`
@@ -56,4 +56,10 @@ type Route struct {
 	PathMatch        interface{} `json:"pathMatch"`        // not implemented
 
 	parents []*Route
+}
+
+type Request struct {
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
 }
