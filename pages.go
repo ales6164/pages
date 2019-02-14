@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/sessions"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
+	"html/template"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -272,7 +273,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			// add query parameters to the api request
 			if hasApi {
-				var dataArray = map[int]interface{}{}
+				var dataArray = make([]interface{}, len(requests))
 
 				for index, r := range requests {
 					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
@@ -369,7 +370,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			// add query parameters to the api request
 			if hasApi {
-				var dataArray = map[int]interface{}{}
+				var dataArray = make([]interface{}, len(requests))
 
 				for index, r := range requests {
 					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
@@ -448,6 +449,15 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 var (
 	regex = regexp.MustCompile(`\$(\w+)`)
 )
+
+type Context struct {
+	Vars  map[string]string
+	Query map[string]interface{}
+	Page  string
+
+	html template.HTML
+	/*data map[string]interface{}*/
+}
 
 func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, []Request, string, bool, error) {
 	var ctx = map[string]interface{}{}
