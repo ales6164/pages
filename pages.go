@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"google.golang.org/appengine"
+	"google.golang.org/appengine/memcache"
 	"google.golang.org/appengine/urlfetch"
 	"html/template"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 type Pages struct {
@@ -173,15 +175,19 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 			"translations": p.Resources.Translations[lang],
 			"storage":      p.Resources.Storage,
 		}
+
 		res, _ := json.Marshal(resources)
-		w.Write([]byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1]))
+		out := []byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1])
+		_, _ = w.Write(out)
+		_ = r.Body.Close()
 	})
 
 	// serve self-contained components
 	for _, c := range p.Components {
-		p.router.HandleFunc("/"+c.Name+".component.js", func(writer http.ResponseWriter, request *http.Request) {
-			writer.Header().Set("Content-Type", "application/javascript")
-			writer.Write(c.RawSelfContained)
+		p.router.HandleFunc("/"+c.Name+".component.js", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/javascript")
+			_, _ = w.Write(c.RawSelfContained)
+			_ = r.Body.Close()
 		})
 	}
 
@@ -214,7 +220,7 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	return p.router, nil
 }
 
-var cachedPages = map[string][]byte{}
+//var cachedPages = map[string][]byte{}
 
 // one path can have multiple routes defined -> when having multiple routers on one page
 func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err error) {
@@ -248,10 +254,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			ctx := appengine.NewContext(req)
 
+			_ = req.Body.Close()
+
 			var cacheKey = req.URL.Host + "/" + req.URL.Path
 
-			if it, ok := cachedPages[cacheKey]; ok {
-				w.Write(it)
+			if item, err := memcache.Get(ctx, cacheKey); err == nil {
+				_, _ = w.Write(item.Value)
 				return
 			}
 
@@ -317,7 +325,9 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						return
 					}
 					buf := new(bytes.Buffer)
-					buf.ReadFrom(resp.Body)
+					_, _ = buf.ReadFrom(resp.Body)
+					_ = resp.Body.Close()
+
 					var data interface{}
 					err = json.Unmarshal(buf.Bytes(), &data)
 					if err != nil {
@@ -325,6 +335,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						return
 					}
 					dataArray[index] = data
+					buf.Reset()
 				}
 
 				context["data"] = dataArray
@@ -338,20 +349,20 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			w.Write([]byte(html))
+			_, _ = w.Write([]byte(html))
 
-			cachedPages[cacheKey] = []byte(html)
-
-			/*memcache.Set(ctx, &memcache.Item{
+			_ = memcache.Set(ctx, &memcache.Item{
 				Key:        req.URL.Host + "/" + req.URL.Path,
 				Value:      []byte(html),
 				Expiration: time.Hour * 24,
-			})*/
+			})
 		}
 	} else {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			ctx := appengine.NewContext(req)
 
+			_ = req.Body.Close()
+
 			context["query"] = map[string]string{}
 
 			vars := mux.Vars(req)
@@ -414,7 +425,9 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						return
 					}
 					buf := new(bytes.Buffer)
-					buf.ReadFrom(resp.Body)
+					_, _ = buf.ReadFrom(resp.Body)
+					_ = resp.Body.Close()
+
 					var data interface{}
 					err = json.Unmarshal(buf.Bytes(), &data)
 					if err != nil {
@@ -422,6 +435,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						return
 					}
 					dataArray[index] = data
+					buf.Reset()
 				}
 
 				context["data"] = dataArray
@@ -435,7 +449,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			w.Write([]byte(html))
+			_, _ = w.Write([]byte(html))
 		}
 	}
 
