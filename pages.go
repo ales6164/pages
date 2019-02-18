@@ -7,9 +7,6 @@ import (
 	"github.com/aymerick/raymond"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/memcache"
-	"google.golang.org/appengine/urlfetch"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -54,7 +51,7 @@ func (p *Pages) withMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
-		if p.forceHostname && getHost(r) != p.ForceHostname {
+		if p.forceHostname && r.Host != p.ForceHostname {
 			http.Redirect(w, r, "https://"+p.ForceHostname+r.RequestURI, http.StatusMovedPermanently)
 			return
 		}
@@ -192,7 +189,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	routerPageVars, templ, requests, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
+	routerPageVars, templ, requests, redirect, _, err := p.RenderRoute(p.Components[layout], routes)
 	if err != nil {
 		return err
 	}
@@ -210,137 +207,21 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			http.Redirect(w, req, resolvedRedirectUri, http.StatusPermanentRedirect)
 		}
-	} else if cache {
-		handleFunc = func(w http.ResponseWriter, req *http.Request) {
-			ctx := appengine.NewContext(req)
-
-			_ = req.Body.Close()
-
-			var cacheKey = req.URL.Host + "/" + req.URL.Path
-
-			if item, err := memcache.Get(ctx, cacheKey); err == nil {
-				_, _ = w.Write(item.Value)
-				return
-			}
-
-			context := map[string]interface{}{}
-			if routerPageVars != nil {
-				for k, v := range routerPageVars {
-					context[k] = v
-				}
-			}
-
-			context["query"] = map[string]string{}
-
-			vars := mux.Vars(req)
-			for key, val := range vars {
-				context["query"].(map[string]string)[key] = val
-			}
-
-			// read lang
-			locale := p.DefaultLocale
-			if lang, err := req.Cookie("lang"); err == nil {
-				locale = lang.Value
-			} else {
-				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
-			}
-			context["locale"] = locale
-
-			// add query parameters to the api request
-			if hasApi {
-				var dataArray = make([]interface{}, len(requests))
-
-				for index, r := range requests {
-					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
-						context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
-						return vars[s[1:]]
-					})
-
-					apiUrl, err := url.Parse(resolvedApiUri)
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-
-					apiUrlQuery := apiUrl.Query()
-					reqQuery := req.URL.Query()
-					for paramName, val := range reqQuery {
-						for _, v := range val {
-							apiUrlQuery.Add(paramName, v)
-						}
-					}
-					apiUrl.RawQuery = apiUrlQuery.Encode()
-
-					client := urlfetch.Client(ctx)
-
-					req, err := http.NewRequest(r.Method, apiUrl.String(), nil)
-					for key, value := range r.Headers {
-						req.Header.Add(key, value)
-					}
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-
-					resp, err := client.Do(req)
-					if resp.StatusCode != http.StatusOK {
-						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
-						return
-					}
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-					buf := new(bytes.Buffer)
-					_, _ = buf.ReadFrom(resp.Body)
-					_ = resp.Body.Close()
-
-					var data interface{}
-					err = json.Unmarshal(buf.Bytes(), &data)
-					if err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
-						return
-					}
-					dataArray[index] = data
-					buf.Reset()
-				}
-
-				context["data"] = dataArray
-			}
-
-			jsonContext, _ := json.Marshal(context)
-			context["json"] = string(jsonContext)
-
-			html, err := templ.Exec(context)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			_, _ = w.Write([]byte(html))
-
-			_ = memcache.Set(ctx, &memcache.Item{
-				Key:        req.URL.Host + "/" + req.URL.Path,
-				Value:      []byte(html),
-				Expiration: time.Hour * 24,
-			})
-		}
 	} else {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
-			ctx := appengine.NewContext(req)
-
 			_ = req.Body.Close()
 
-			context := map[string]interface{}{}
+			pageContext := map[string]interface{}{}
 			if routerPageVars != nil {
 				for k, v := range routerPageVars {
-					context[k] = v
+					pageContext[k] = v
 				}
 			}
-			context["query"] = map[string]string{}
+			pageContext["query"] = map[string]string{}
 
 			vars := mux.Vars(req)
 			for key, val := range vars {
-				context["query"].(map[string]string)[key] = val
+				pageContext["query"].(map[string]string)[key] = val
 			}
 
 			// read lang
@@ -350,7 +231,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			} else {
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
-			context["locale"] = locale
+			pageContext["locale"] = locale
 
 			// add query parameters to the api request
 			if hasApi {
@@ -358,7 +239,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 				for index, r := range requests {
 					resolvedApiUri := regex.ReplaceAllStringFunc(r.URL, func(s string) string {
-						context["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+						pageContext["query"].(map[string]string)[s[1:]] = vars[s[1:]]
 						return vars[s[1:]]
 					})
 
@@ -377,7 +258,9 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 					}
 					apiUrl.RawQuery = apiUrlQuery.Encode()
 
-					client := urlfetch.Client(ctx)
+					var client = &http.Client{
+						Timeout: time.Second * 10,
+					}
 
 					req, err := http.NewRequest(r.Method, apiUrl.String(), nil)
 					for key, value := range r.Headers {
@@ -411,13 +294,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 					buf.Reset()
 				}
 
-				context["data"] = dataArray
+				pageContext["data"] = dataArray
 			}
 
-			jsonContext, _ := json.Marshal(context)
-			context["json"] = string(jsonContext)
+			jsonContext, _ := json.Marshal(pageContext)
+			pageContext["json"] = string(jsonContext)
 
-			html, err := templ.Exec(context)
+			html, err := templ.Exec(pageContext)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
