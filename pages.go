@@ -11,7 +11,6 @@ import (
 	"google.golang.org/appengine/memcache"
 	"google.golang.org/appengine/urlfetch"
 	"html/template"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
@@ -41,7 +40,7 @@ type Options struct {
 	forceHostname      bool
 }
 
-var (
+const (
 	DefaultOutlet = "router-outlet"
 	DefaultLayout = "index"
 )
@@ -165,45 +164,6 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return string(d)
 	})
 
-	// serve components
-	p.router.HandleFunc("/"+p.Manifest.ComponentsVersion+".js", func(w http.ResponseWriter, r *http.Request) {
-		var lang = r.URL.Query().Get("lang")
-		if len(lang) == 0 {
-			lang = p.DefaultLocale
-		}
-		resources := map[string]interface{}{
-			"translations": p.Resources.Translations[lang],
-			"storage":      p.Resources.Storage,
-		}
-
-		res, _ := json.Marshal(resources)
-		out := []byte(p.Manifest.Components[0] + string(res) + p.Manifest.Components[1])
-		_, _ = w.Write(out)
-		_ = r.Body.Close()
-	})
-
-	// serve self-contained components
-	for _, c := range p.Components {
-		p.router.HandleFunc("/"+c.Name+".component.js", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/javascript")
-			_, _ = w.Write(c.RawSelfContained)
-			_ = r.Body.Close()
-		})
-	}
-
-	// serve static files
-	public := path.Join(p.base, "public")
-	files, err2 := ioutil.ReadDir(public)
-	if err2 == nil {
-		for _, file := range files {
-			if file.IsDir() {
-				p.router.PathPrefix("/" + file.Name()).Handler(http.StripPrefix("/"+file.Name(), http.FileServer(http.Dir(path.Join(public, file.Name())))))
-			} else {
-				p.router.Handle("/"+file.Name(), http.FileServer(http.Dir(public)))
-			}
-		}
-	}
-
 	// attaches routes to paths - this way we don't have two Handlers for the same path
 	var handle = map[string][]*Route{}
 	for _, route := range p.Routes {
@@ -232,7 +192,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		}
 	}
 
-	context, templ, requests, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
+	routerPageVars, templ, requests, redirect, cache, err := p.RenderRoute(p.Components[layout], routes)
 	if err != nil {
 		return err
 	}
@@ -263,6 +223,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				return
 			}
 
+			context := map[string]interface{}{}
+			if routerPageVars != nil {
+				for k, v := range routerPageVars {
+					context[k] = v
+				}
+			}
+
 			context["query"] = map[string]string{}
 
 			vars := mux.Vars(req)
@@ -271,13 +238,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			}
 
 			// read lang
-			p.locale = p.DefaultLocale
+			locale := p.DefaultLocale
 			if lang, err := req.Cookie("lang"); err == nil {
-				p.locale = lang.Value
+				locale = lang.Value
 			} else {
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
-			context["locale"] = p.locale
+			context["locale"] = locale
 
 			// add query parameters to the api request
 			if hasApi {
@@ -363,6 +330,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 			_ = req.Body.Close()
 
+			context := map[string]interface{}{}
+			if routerPageVars != nil {
+				for k, v := range routerPageVars {
+					context[k] = v
+				}
+			}
 			context["query"] = map[string]string{}
 
 			vars := mux.Vars(req)
@@ -371,13 +344,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			}
 
 			// read lang
-			p.locale = p.DefaultLocale
+			locale := p.DefaultLocale
 			if lang, err := req.Cookie("lang"); err == nil {
-				p.locale = lang.Value
+				locale = lang.Value
 			} else {
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
-			context["locale"] = p.locale
+			context["locale"] = locale
 
 			// add query parameters to the api request
 			if hasApi {
@@ -416,12 +389,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 					}
 
 					resp, err := client.Do(req)
-					if resp.StatusCode != http.StatusOK {
-						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
-						return
-					}
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					if resp.StatusCode != http.StatusOK {
+						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
 						return
 					}
 					buf := new(bytes.Buffer)
@@ -474,12 +447,12 @@ type Context struct {
 }
 
 func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, []Request, string, bool, error) {
-	var ctx = map[string]interface{}{}
 	var body = layout.Template.Clone()
 	var requests []Request
 	var redirect string
 	var done = map[int]bool{}
 	var cache bool
+	var routePage map[string]interface{}
 
 	//var routesToHandle []*Route
 	for _, route := range routes {
@@ -502,6 +475,8 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 			break
 		}
 
+		routePage = route.Page
+
 		// set outlet
 		outlet := route.Outlet
 		if len(outlet) == 0 {
@@ -510,25 +485,15 @@ func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]inte
 
 		requests = route.Requests
 
-		if route.Page != nil {
-			for k, v := range route.Page {
-				ctx[k] = v
-			}
-		}
-
 		if len(route.Component) > 0 {
 			if component, ok := p.Components[route.Component]; ok {
-				if component.Render {
-					body.RegisterPartial(outlet, "<"+component.Name+">"+component.Raw+"</"+component.Name+">")
-				} else {
-					body.RegisterPartial(outlet, "<"+component.Name+"></"+component.Name+">")
-				}
+				body.RegisterPartial(outlet, "{{> "+component.Name+"}}")
 			} else {
-				return ctx, body, requests, redirect, cache, errors.New("component " + route.Component + " doesn't exist")
+				return route.Page, body, requests, redirect, cache, errors.New("component " + route.Component + " doesn't exist")
 			}
 		}
 
 	}
 
-	return ctx, body, requests, redirect, cache, nil
+	return routePage, body, requests, redirect, cache, nil
 }

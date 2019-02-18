@@ -6,7 +6,6 @@ type Manifest struct {
 	Routes            []*Route   `json:"routes"`
 	Resources         *Resources `json:"resources"`
 	ComponentsVersion string     `json:"componentsVersion"`
-	Components        []string   `json:"components"`
 }
 
 type Resources struct {

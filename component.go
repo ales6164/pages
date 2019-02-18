@@ -8,9 +8,8 @@ import (
 
 type Component struct {
 	*Import
-	Template         *raymond.Template
-	Raw              string
-	RawSelfContained []byte
+	Template *raymond.Template
+	//Raw              string
 }
 
 func NewComponent(im *Import) (*Component, error) {
@@ -21,18 +20,26 @@ func NewComponent(im *Import) (*Component, error) {
 	if err != nil {
 		return c, err
 	}
-	c.Raw = string(fs)
+	raw := string(fs)
+	fs = []byte("")
 
 	if len(c.ComponentPath) > 0 {
 		fs, err = ioutil.ReadFile(c.ComponentPath)
 		if err != nil {
 			return c, err
 		}
-		c.RawSelfContained = fs
+		/*c.RawSelfContained = fs*/
 	}
 
-	raymond.RegisterPartial(c.Name, "<"+c.Name+">"+c.Raw+"</"+c.Name+">")
-	c.Template, err = raymond.Parse(c.Raw)
+	if im.Render {
+		raymond.RegisterPartial(c.Name, "<"+c.Name+">"+raw+"</"+c.Name+">")
+	} else {
+		raymond.RegisterPartial(c.Name, "<"+c.Name+"></"+c.Name+">")
+	}
+
+	//raymond.RegisterPartial(c.Name, "<"+c.Name+">"+c.Raw+"</"+c.Name+">")
+	c.Template, err = raymond.Parse(raw)
+	raw = ""
 	if err != nil {
 		return c, errors.New("error parsing file: " + c.TemplatePath + "; " + err.Error())
 	}
