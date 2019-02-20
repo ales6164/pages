@@ -1,5 +1,9 @@
 package pages
 
+import (
+	"encoding/json"
+)
+
 type Manifest struct {
 	DefaultLocale     string     `json:"defaultLocale"`
 	Imports           []*Import  `json:"imports"`
@@ -61,4 +65,5 @@ type Request struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
+	Body    json.RawMessage   `json:"body"`
 }

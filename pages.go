@@ -262,16 +262,34 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						Timeout: time.Second * 10,
 					}
 
-					req, err := http.NewRequest(r.Method, apiUrl.String(), nil)
-					for key, value := range r.Headers {
-						req.Header.Add(key, value)
+					/*var reader io.Reader
+					if r.BodyReader != nil {
+						reader = r.BodyReader
+					}*/
+
+					var req *http.Request
+					var resp *http.Response
+					buf := new(bytes.Buffer)
+
+					if r.Body != nil {
+						buf.Write(r.Body)
+						req, err = http.NewRequest(r.Method, apiUrl.String(), buf)
+					} else {
+						req, err = http.NewRequest(r.Method, apiUrl.String(), nil)
 					}
+
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
 
-					resp, err := client.Do(req)
+					for key, value := range r.Headers {
+						req.Header.Add(key, value)
+					}
+
+					resp, err = client.Do(req)
+					buf.Reset()
+
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -280,7 +298,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						http.Error(w, http.StatusText(resp.StatusCode), resp.StatusCode)
 						return
 					}
-					buf := new(bytes.Buffer)
+
 					_, _ = buf.ReadFrom(resp.Body)
 					_ = resp.Body.Close()
 
