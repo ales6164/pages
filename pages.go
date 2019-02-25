@@ -8,6 +8,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -127,7 +128,7 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 
 	newPath := path.Join(basePath, route.Path)
 	if route.Path == "/" {
-		newPath += "/"
+		//newPath += "/"
 	}
 
 	h[newPath] = append(h[newPath], parents...)
@@ -329,7 +330,14 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 
 	p.forceHostname = len(p.ForceHostname) > 0
 
-	r.Handle(path, p.withMiddleware(handleFunc))
+	if path[len(path)-1:] == "*" {
+		// catch all handler
+		log.Printf("Catch all handler on path %s", path[:len(path)-1])
+		r.PathPrefix(path[:len(path)-1]).Handler(p.withMiddleware(handleFunc))
+	} else {
+		log.Printf("Handler on path %s", path)
+		r.Handle(path, p.withMiddleware(handleFunc))
+	}
 
 	return err
 }
