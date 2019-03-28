@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/aymerick/raymond"
+	"github.com/ales6164/raymond"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
-	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -80,15 +79,6 @@ func New(opt *Options) (*Pages, error) {
 		return p, err
 	}
 
-	// add necessary fields
-	if p.Manifest.Resources == nil {
-		p.Manifest.Resources = &Resources{
-			Translations: map[string]map[string]string{},
-		}
-	} else if p.Manifest.Resources.Translations == nil {
-		p.Manifest.Resources.Translations = map[string]map[string]string{}
-	}
-
 	// set base path from calling script absolute path and settings.json dir
 	p.base = filepath.Dir(p.JsonFilePath)
 
@@ -111,9 +101,6 @@ func New(opt *Options) (*Pages, error) {
 				return p, err
 			}
 			p.Components[imp.Name] = newC
-			if err != nil {
-				return p, err
-			}
 		}
 	}
 
@@ -150,11 +137,6 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 func (p *Pages) BuildRouter() (*mux.Router, error) {
 	p.router = mux.NewRouter()
 	p.routeCount = -1
-
-	// add i18n helper
-	raymond.RegisterHelper("i18n", func(locale string, key string) string {
-		return p.Manifest.Resources.Translations[locale][key]
-	})
 
 	// add json helper
 	raymond.RegisterHelper("json", func(k interface{}) string {
@@ -213,28 +195,31 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			_ = req.Body.Close()
 
 			pageContext := map[string]interface{}{
-				"storage": p.Resources.Storage,
+				"storage": p.Resources,
 			}
 			if routerPageVars != nil {
 				for k, v := range routerPageVars {
 					pageContext[k] = v
 				}
 			}
-			pageContext["query"] = map[string]string{}
 
 			vars := mux.Vars(req)
+
+			pageContext["query"] = vars
+
+			/*vars := mux.Vars(req)
 			for key, val := range vars {
 				pageContext["query"].(map[string]string)[key] = val
-			}
+			}*/
 
 			// read lang
-			locale := p.DefaultLocale
+			/*locale := p.DefaultLocale
 			if lang, err := req.Cookie("lang"); err == nil {
 				locale = lang.Value
 			} else {
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
-			pageContext["locale"] = locale
+			pageContext["locale"] = locale*/
 
 			// add query parameters to the api request
 			if hasApi {
@@ -347,15 +332,6 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 var (
 	regex = regexp.MustCompile(`\$(\w+)`)
 )
-
-type Context struct {
-	Vars  map[string]string
-	Query map[string]interface{}
-	Page  string
-
-	html template.HTML
-	/*data map[string]interface{}*/
-}
 
 func (p *Pages) RenderRoute(layout *Component, routes []*Route) (map[string]interface{}, *raymond.Template, []Request, string, bool, error) {
 	var body = layout.Template.Clone()

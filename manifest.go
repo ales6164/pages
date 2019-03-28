@@ -5,16 +5,11 @@ import (
 )
 
 type Manifest struct {
-	DefaultLocale     string     `json:"defaultLocale"`
-	Imports           []*Import  `json:"imports"`
-	Routes            []*Route   `json:"routes"`
-	Resources         *Resources `json:"resources"`
-	ComponentsVersion string     `json:"componentsVersion"`
-}
-
-type Resources struct {
-	Translations map[string]map[string]string `json:"translations"`
-	Storage      map[string]interface{}       `json:"storage"`
+	DefaultLocale     string      `json:"defaultLocale"`
+	Imports           []*Import   `json:"imports"`
+	Routes            []*Route    `json:"routes"`
+	Resources         interface{} `json:"resources"`
+	ComponentsVersion string      `json:"componentsVersion"`
 }
 
 type Import struct {
