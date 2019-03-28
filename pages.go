@@ -212,7 +212,9 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
 			_ = req.Body.Close()
 
-			pageContext := map[string]interface{}{}
+			pageContext := map[string]interface{}{
+				"storage": p.Resources.Storage,
+			}
 			if routerPageVars != nil {
 				for k, v := range routerPageVars {
 					pageContext[k] = v
