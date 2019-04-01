@@ -260,7 +260,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 					buf := new(bytes.Buffer)
 
 					if r.Body != nil {
-						buf.Write(r.Body)
+						newBody := regex.ReplaceAllStringFunc(string(r.Body), func(s string) string {
+							pageContext["query"].(map[string]string)[s[1:]] = vars[s[1:]]
+							return vars[s[1:]]
+						})
+
+						buf.WriteString(newBody)
 						req, err = http.NewRequest(r.Method, apiUrl.String(), buf)
 					} else {
 						req, err = http.NewRequest(r.Method, apiUrl.String(), nil)
