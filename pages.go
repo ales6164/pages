@@ -139,7 +139,7 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	p.routeCount = -1
 
 	// add json helper
-	raymond.RegisterHelper("json", func(k interface{}) string {
+	raymond.RegisterHelper("stringify", func(k interface{}) string {
 		d, _ := json.Marshal(k)
 		return string(d)
 	})
@@ -309,7 +309,7 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 			}
 
 			jsonContext, _ := json.Marshal(pageContext)
-			pageContext["json"] = string(jsonContext)
+			pageContext["contextObject"] = string(jsonContext)
 
 			html, err := templ.Exec(pageContext)
 			if err != nil {
