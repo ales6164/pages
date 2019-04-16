@@ -152,8 +152,8 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	p.routeCount = -1
 
 	// add i18n helper
-	raymond.RegisterHelper("i18n", func(key string) string {
-		return p.Manifest.Resources.Translations[p.locale][key]
+	raymond.RegisterHelper("i18n", func(locale string, key string) string {
+		return p.Manifest.Resources.Translations[locale][key]
 	})
 
 	// add json helper
