@@ -144,6 +144,18 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return string(d)
 	})
 
+	// add translation helper
+	raymond.RegisterHelper("trans", func(locale string, k string) string {
+		if res, ok := p.Resources.(map[string]interface{}); ok {
+			if trans, ok := res["translations"].(map[string]interface{}); ok {
+				if lang, ok := trans[locale].(map[string]string); ok {
+					return lang[k]
+				}
+			}
+		}
+		return k
+	})
+
 	// attaches routes to paths - this way we don't have two Handlers for the same path
 	var handle = map[string][]*Route{}
 	for _, route := range p.Routes {
