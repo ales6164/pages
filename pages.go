@@ -79,6 +79,12 @@ func New(opt *Options) (*Pages, error) {
 		return p, err
 	}
 
+	// parse resources
+	err = json.Unmarshal(p.Manifest.Resources, &p.Manifest.parsedResources)
+	if err != nil {
+		return p, err
+	}
+
 	// set base path from calling script absolute path and settings.json dir
 	p.base = filepath.Dir(p.JsonFilePath)
 
@@ -146,14 +152,11 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 
 	// add translation helper
 	raymond.RegisterHelper("trans", func(locale string, k string) string {
-		if res, ok := p.Resources.(map[string]interface{}); ok {
-			if trans, ok := res["translations"].(map[string]interface{}); ok {
-				if lang, ok := trans[locale].(map[string]string); ok {
-					return lang[k]
-				}
-			}
+		v, err := p.Manifest.GetResource("translations", locale, k)
+		if err != nil {
+			return k
 		}
-		return k
+		return v
 	})
 
 	// attaches routes to paths - this way we don't have two Handlers for the same path

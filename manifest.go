@@ -2,14 +2,16 @@ package pages
 
 import (
 	"encoding/json"
+	"github.com/buger/jsonparser"
 )
 
 type Manifest struct {
-	DefaultLocale     string      `json:"defaultLocale"`
-	Imports           []*Import   `json:"imports"`
-	Routes            []*Route    `json:"routes"`
-	Resources         interface{} `json:"resources"`
-	ComponentsVersion string      `json:"componentsVersion"`
+	DefaultLocale     string          `json:"defaultLocale"`
+	Imports           []*Import       `json:"imports"`
+	Routes            []*Route        `json:"routes"`
+	Resources         json.RawMessage `json:"resources"`
+	parsedResources   interface{}
+	ComponentsVersion string `json:"componentsVersion"`
 }
 
 type Import struct {
@@ -18,6 +20,10 @@ type Import struct {
 	Name          string `json:"name"`
 	IsLayout      bool   `json:"layout"`
 	Render        bool   `json:"render"`
+}
+
+func (m *Manifest) GetResource(keys ...string) (string, error) {
+	return jsonparser.GetString(m.Resources, keys...)
 }
 
 /*
