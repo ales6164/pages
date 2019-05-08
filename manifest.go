@@ -20,6 +20,7 @@ type Import struct {
 	Name          string `json:"name"`
 	IsLayout      bool   `json:"layout"`
 	Render        bool   `json:"render"`
+	OmitTags      bool   `json:"omitTags"`
 }
 
 func (m *Manifest) GetResource(keys ...string) (string, error) {

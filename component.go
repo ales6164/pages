@@ -32,7 +32,11 @@ func NewComponent(im *Import) (*Component, error) {
 	}
 
 	if im.Render {
-		raymond.RegisterPartial(c.Name, "<"+c.Name+">"+raw+"</"+c.Name+">")
+		if im.OmitTags {
+			raymond.RegisterPartial(c.Name, raw)
+		} else {
+			raymond.RegisterPartial(c.Name, "<"+c.Name+">"+raw+"</"+c.Name+">")
+		}
 	} else {
 		raymond.RegisterPartial(c.Name, "<"+c.Name+"></"+c.Name+">")
 	}

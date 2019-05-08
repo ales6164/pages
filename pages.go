@@ -323,7 +323,11 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				pageContext["data"] = dataArray
 			}
 
-			jsonContext, _ := json.Marshal(pageContext)
+			jsonContext, err := json.Marshal(pageContext)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			pageContext["contextObject"] = string(jsonContext)
 
 			html, err := templ.Exec(pageContext)
