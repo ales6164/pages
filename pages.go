@@ -120,8 +120,8 @@ func (p *Pages) iter(h map[string][]*Route, route *Route, basePath string, paren
 	route.id = p.routeCount
 
 	newPath := path.Join(basePath, route.Path)
-	if route.Path == "/" {
-		//newPath += "/"
+	if len(route.Path) > 1 && route.Path[len(route.Path)-1:] == "/" {
+		newPath += "/"
 	}
 
 	h[newPath] = append(h[newPath], parents...)
@@ -195,15 +195,17 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 	var hasApi = len(requests) > 0
 
 	var handleFunc http.HandlerFunc
+	//var resolvedRedirectUri string
 	if len(redirect) > 0 {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
-			vars := mux.Vars(req)
+			// todo: doesnt work
+			/*vars := mux.Vars(req)
 
-			resolvedRedirectUri := regex.ReplaceAllStringFunc(redirect, func(s string) string {
+			resolvedRedirectUri = regex.ReplaceAllStringFunc(redirect, func(s string) string {
 				return vars[s[1:]]
-			})
+			})*/
 
-			http.Redirect(w, req, resolvedRedirectUri, http.StatusPermanentRedirect)
+			http.Redirect(w, req, redirect, http.StatusPermanentRedirect)
 		}
 	} else {
 		handleFunc = func(w http.ResponseWriter, req *http.Request) {
@@ -346,7 +348,12 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 		log.Printf("Catch all handler on path %s", path[:len(path)-1])
 		r.PathPrefix(path[:len(path)-1]).Handler(p.withMiddleware(handleFunc))
 	} else {
-		log.Printf("Handler on path %s", path)
+		if len(redirect) > 0 {
+			log.Printf("Redirect handler on path %s leading to %s", path, redirect)
+		} else {
+			log.Printf("Handler on path %s", path)
+		}
+
 		r.Handle(path, p.withMiddleware(handleFunc))
 	}
 
