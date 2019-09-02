@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -237,6 +238,15 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 				req.AddCookie(&http.Cookie{Name: "lang", Value: p.DefaultLocale, Path: "/", MaxAge: 60 * 60 * 24 * 30 * 12})
 			}
 			pageContext["locale"] = locale*/
+
+			splitPath := strings.Split(req.URL.EscapedPath(), "/")
+
+			if len(splitPath) > 1 && len(splitPath[1]) == 2 {
+				// alternate url
+				pageContext["alternate"] = "/" + strings.Join(splitPath[2:], "/")
+			} else {
+				pageContext["alternate"] = strings.Join(splitPath, "/")
+			}
 
 			// add query parameters to the api request
 			if hasApi {
