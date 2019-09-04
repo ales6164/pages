@@ -160,6 +160,14 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return v
 	})
 
+	raymond.RegisterHelper("i18n", func(k string) string {
+		v, err := p.Manifest.GetResource("translations", p.Manifest.DefaultLocale, k)
+		if err != nil {
+			return k
+		}
+		return v
+	})
+
 	// attaches routes to paths - this way we don't have two Handlers for the same path
 	var handle = map[string][]*Route{}
 	for _, route := range p.Routes {
