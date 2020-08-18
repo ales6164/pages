@@ -151,7 +151,7 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return string(d)
 	})
 
-	// add json helper
+	// append string helper
 	raymond.RegisterHelper("append", func(k1, k2 string) string {
 		return k1 + k2
 	})
