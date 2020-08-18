@@ -13,7 +13,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -153,33 +152,8 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	})
 
 	// add json helper
-	raymond.RegisterHelper("append", func(k ...interface{}) string {
-		if len(k) > 0 {
-			k = k[:len(k)-1]
-		}
-		var o = k[0]
-
-		switch o.(type) {
-		case string:
-			var str = ""
-			for _, v := range k {
-				if s, ok := v.(string); ok {
-					str += s
-				}
-			}
-			return str
-		case int:
-			var sum = 0
-			for _, v := range k {
-				if s, ok := v.(int); ok {
-					sum += s
-				}
-			}
-			return strconv.Itoa(sum)
-		}
-
-		d, _ := json.Marshal(k)
-		return string(d)
+	raymond.RegisterHelper("append", func(k1, k2 string) string {
+		return k1 + k2
 	})
 
 	// add translation helper
