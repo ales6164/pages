@@ -160,6 +160,11 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 		return v
 	})
 
+	// append string helper
+	raymond.RegisterHelper("append", func(k1, k2 string) string {
+		return k1 + k2
+	})
+
 	raymond.RegisterHelper("i18n", func(k string) string {
 		v, err := p.Manifest.GetResource("translations", p.Manifest.DefaultLocale, k)
 		if err != nil {
