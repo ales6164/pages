@@ -43,7 +43,7 @@ const (
 	DefaultLayout = "index"
 )
 
-func (p *Pages) withMiddleware(next http.FileHandler) http.Handler {
+func (p *Pages) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proto := r.Header.Get("x-forwarded-proto")
 		if p.ForceSSL {
