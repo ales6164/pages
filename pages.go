@@ -277,13 +277,13 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 						return
 					}
 
-					apiUrlQuery := apiUrl.Query()
+					/*apiUrlQuery := apiUrl.Query()
 					reqQuery := req.URL.Query()
 					for paramName, val := range reqQuery {
 						for _, v := range val {
 							apiUrlQuery.Add(paramName, v)
 						}
-					}
+					}*/
 					// TODO: do sth about query param copying
 					//apiUrl.RawQuery = apiUrlQuery.Encode()
 
