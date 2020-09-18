@@ -1,7 +1,5 @@
 module github.com/ales6164/pages/v5
 
-go 1.14
-
 require (
 	github.com/ales6164/raymond v2.0.3+incompatible
 	github.com/aymerick/raymond v2.0.2+incompatible // indirect
