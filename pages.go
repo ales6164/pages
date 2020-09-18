@@ -1,4 +1,4 @@
-package pages
+package main
 
 import (
 	"bytes"
@@ -279,7 +279,8 @@ func (p *Pages) handleRoute(r *mux.Router, path string, routes []*Route) (err er
 							apiUrlQuery.Add(paramName, v)
 						}
 					}
-					apiUrl.RawQuery = apiUrlQuery.Encode()
+					// TODO: do sth about query param copying
+					//apiUrl.RawQuery = apiUrlQuery.Encode()
 
 					var client = &http.Client{
 						Timeout: time.Second * 10,
