@@ -161,8 +161,8 @@ func (p *Pages) BuildRouter() (*mux.Router, error) {
 	})
 
 	// append string helper
-	raymond.RegisterHelper("append", func(k1, k2 string) string {
-		return k1 + k2
+	raymond.RegisterHelper("append", func(k1 ...string) string {
+		return strings.Join(k1, "")
 	})
 
 	raymond.RegisterHelper("i18n", func(k string) string {
